@@ -24,6 +24,31 @@ npm run dev
 
 Then open `http://localhost:3000` in your browser.
 
+## 🤖 MCP Server (AI Integration)
+
+**NEW!** Access all backend features via LLM-friendly tools through the Model Context Protocol (MCP) server.
+
+```bash
+# Quick start with Docker
+docker-compose up -d
+
+# Or manual setup
+cd mcp-server
+pip install -r requirements.txt
+python server.py
+```
+
+**Use with Claude Desktop** - See [MCP_SERVER_GUIDE.md](./MCP_SERVER_GUIDE.md) for setup instructions.
+
+**Features:**
+- 🔧 10 MCP tools wrapping all backend APIs
+- 📊 LLM-friendly formatted output (summaries + full JSON)
+- 🐳 Docker support for easy deployment
+- 💾 Save and retrieve analysis history
+- 📈 203+ strategies + 9 portfolio strategies
+
+For detailed documentation, see [mcp-server/README.md](./mcp-server/README.md).
+
 ## 🧪 Testing
 
 **[See TESTING.md for complete testing guide](./TESTING.md)**
