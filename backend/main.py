@@ -177,6 +177,18 @@ async def optimize_strategies(request: OptimizationRequest):
                 detail=f"No data found for ticker {request.ticker} in the specified date range."
             )
 
+        # Prepare price data for charting
+        price_data = []
+        for idx, row in data.iterrows():
+            price_data.append({
+                'date': idx.strftime('%Y-%m-%d'),
+                'open': float(row['Open']),
+                'high': float(row['High']),
+                'low': float(row['Low']),
+                'close': float(row['Close']),
+                'volume': int(row['Volume'])
+            })
+
         # Run parallel optimization
         optimization_results = optimize_multiple_strategies(
             strategies=request.strategies,
@@ -192,7 +204,8 @@ async def optimize_strategies(request: OptimizationRequest):
             startDate=request.startDate,
             endDate=request.endDate,
             optimization_results=optimization_results,
-            summary=summary
+            summary=summary,
+            price_data=price_data
         )
 
     except HTTPException:

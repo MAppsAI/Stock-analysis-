@@ -59,3 +59,4 @@ class OptimizationResponse(BaseModel):
     endDate: str
     optimization_results: Dict[str, Any]
     summary: Dict[str, Any]
+    price_data: List[dict]  # OHLC data for charting (same as BacktestResponse)
