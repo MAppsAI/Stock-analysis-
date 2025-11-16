@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Container, Box, Typography, Paper } from '@mui/material';
 import ControlPanel from './components/ControlPanel';
+import SummaryCards from './components/SummaryCards';
+import VisualizationPanel from './components/VisualizationPanel';
 import ResultsTable from './components/ResultsTable';
 import StrategyDrilldown from './components/StrategyDrilldown';
 import { BacktestResponse, StrategyResult } from './types';
@@ -27,10 +29,10 @@ function App() {
       <Box sx={{ my: 4 }}>
         <Paper elevation={3} sx={{ p: 3, mb: 3, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
           <Typography variant="h3" component="h1" gutterBottom sx={{ color: 'white', fontWeight: 'bold' }}>
-            The Strategy Matrix
+            The Strategy Matrix v3.0
           </Typography>
           <Typography variant="h6" sx={{ color: 'rgba(255, 255, 255, 0.9)' }}>
-            Discover which trading strategies work for your stock in real-time
+            Test 35 strategies with advanced visualization and analytics
           </Typography>
         </Paper>
 
@@ -44,6 +46,13 @@ function App() {
 
         {backtestData && !isLoading && (
           <Box sx={{ mt: 3 }}>
+            <SummaryCards
+              results={backtestData.results}
+              ticker={backtestData.ticker}
+            />
+
+            <VisualizationPanel results={backtestData.results} />
+
             <ResultsTable
               results={backtestData.results}
               onStrategyClick={handleStrategyClick}

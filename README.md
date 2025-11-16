@@ -28,7 +28,7 @@ Then open `http://localhost:3000` in your browser.
 
 **[See TESTING.md for complete testing guide](./TESTING.md)**
 
-Quick verification of all 25 strategies:
+Quick verification of all 35 strategies:
 
 ```bash
 cd backend
@@ -63,10 +63,31 @@ This runs a comprehensive 10-year backtest on synthetic SPY data and verifies al
 2. 📈 SMA 50/200 Cross: +203.54% (Sharpe: 0.81)
 3. 📊 EMA 12/26 Cross: +127.15% (Sharpe: 0.60)
 
-**Next: v3.0 (The 100-Strategy Platform)** - Planned
-- Scale library to 100+ strategies
-- Add VisualizationPanel (bar charts, heatmaps)
-- Optimize for sub-minute response times
+**v3.0 (Advanced Analytics Platform) - COMPLETED** ✓
+- ✓ Expanded to 35 strategies across 6 categories:
+  - **Trend-Following (15)**: SMA/EMA crosses, MACD, Supertrend, Hull MA, ADX, DMI, Aroon, Ichimoku
+  - **Mean-Reversion (6)**: RSI, Bollinger Bands, Stochastic, CCI, Williams %R
+  - **Momentum (5)**: ROC, RSI Momentum, 52-Week Breakout, MA Momentum
+  - **Volatility (3)**: ATR Breakout, Bollinger Squeeze, Keltner Channel
+  - **Volume (5)**: Volume Breakout, OBV, VPT, VWAP Cross
+  - **Advanced (1)**: Ichimoku Cloud
+- ✓ **VisualizationPanel** with interactive charts:
+  - Top 10 performers bar chart with color-coded returns
+  - Category performance comparison
+  - Sharpe ratio visualization
+- ✓ **SummaryCards** dashboard:
+  - Best strategy highlight
+  - Best risk-adjusted strategy
+  - Profitable strategies percentage
+  - Average performance metrics
+- ✓ Enhanced UI with professional data visualization
+
+**Next: v4.0 (Future Enhancements)** - Planned
+- User accounts and saved strategies
+- Strategy combination testing ("This AND That")
+- Crypto and forex market support
+- Real-time paper trading simulation
+- Advanced parameter optimization
 
 ---
 1. The Vision
