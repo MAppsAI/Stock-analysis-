@@ -6,29 +6,61 @@ from typing import Tuple, List
 def extract_signals(data: pd.DataFrame, position_col: str = 'Position') -> List[dict]:
     """Helper function to extract buy/sell signals from position changes
 
-    Position values from Signal.diff():
-    - Position > 0: Long entry (1.0 = initial entry from 0->1, 2.0 = re-entry from -1->1)
-    - Position < 0: Short/Exit (−1.0 = initial from 0->-1, -2.0 = switch from 1->-1)
+    Position = Signal.diff() captures transitions:
+    - Position = 1: 0→1 (enter long) OR -1→0 (exit short to neutral)
+    - Position = 2: -1→1 (exit short + enter long)
+    - Position = -1: 1→0 (exit long to neutral) OR 0→-1 (enter short)
+    - Position = -2: 1→-1 (exit long + enter short)
+
+    We need to look at both current Signal and Position to determine action type.
     """
     signals = []
-    # Capture ALL long entries: both initial (1.0) and re-entries (2.0)
-    buy_signals = data[data[position_col] > 0]
-    # Capture ALL short/exit signals: both initial (-1.0) and switches (-2.0)
-    sell_signals = data[data[position_col] < 0]
 
-    for idx, row in buy_signals.iterrows():
-        signals.append({
-            'date': idx.strftime('%Y-%m-%d'),
-            'price': float(row['Close']),
-            'type': 'buy'
-        })
+    # Get previous signal to understand the transition context
+    data['Prev_Signal'] = data['Signal'].shift(1).fillna(0)
 
-    for idx, row in sell_signals.iterrows():
-        signals.append({
-            'date': idx.strftime('%Y-%m-%d'),
-            'price': float(row['Close']),
-            'type': 'sell'
-        })
+    for idx, row in data.iterrows():
+        pos = row[position_col]
+        curr_signal = row['Signal']
+        prev_signal = row['Prev_Signal']
+
+        if pd.isna(pos) or pos == 0:
+            continue
+
+        # LONG ENTRIES: Transitions that result in Signal = 1
+        if pos == 1 and curr_signal == 1:  # 0→1: Enter long from neutral
+            signals.append({
+                'date': idx.strftime('%Y-%m-%d'),
+                'price': float(row['Close']),
+                'type': 'buy'
+            })
+        elif pos == 2:  # -1→1: Exit short + Enter long
+            signals.append({
+                'date': idx.strftime('%Y-%m-%d'),
+                'price': float(row['Close']),
+                'type': 'buy'
+            })
+        # SHORT ENTRIES / LONG EXITS: Transitions that result in Signal = -1 or 0
+        elif pos == -1 and curr_signal == -1:  # Either 1→-1 or 0→-1: Enter short
+            signals.append({
+                'date': idx.strftime('%Y-%m-%d'),
+                'price': float(row['Close']),
+                'type': 'sell'
+            })
+        elif pos == -1 and curr_signal == 0:  # 1→0: Exit long to neutral
+            signals.append({
+                'date': idx.strftime('%Y-%m-%d'),
+                'price': float(row['Close']),
+                'type': 'sell'
+            })
+        elif pos == -2:  # 1→-1: Exit long + Enter short
+            signals.append({
+                'date': idx.strftime('%Y-%m-%d'),
+                'price': float(row['Close']),
+                'type': 'sell'
+            })
+        # Note: pos == 1 with curr_signal == 0 (-1→0: exit short) is NOT included
+        # as it's not a traditional "buy" - it's just covering a short position
 
     signals.sort(key=lambda x: x['date'])
     return signals
