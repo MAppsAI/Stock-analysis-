@@ -90,23 +90,51 @@ export default function VisualizationPanel({ results }: VisualizationPanelProps)
   const categoryData = categorizePerformance();
 
   const getBarColor = (value: number): string => {
-    if (value > 50) return '#4caf50'; // Green
-    if (value > 0) return '#8bc34a';  // Light green
-    if (value > -20) return '#ff9800'; // Orange
-    return '#f44336'; // Red
+    if (value > 50) return '#00ffaa';
+    if (value > 0) return '#00ffff';
+    if (value > -20) return '#ffaa00';
+    return '#ff0055';
   };
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       return (
-        <Paper sx={{ p: 2, backgroundColor: 'rgba(0, 0, 0, 0.9)' }}>
-          <Typography variant="body2" sx={{ color: 'white', fontWeight: 'bold' }}>
+        <Paper
+          sx={{
+            p: 2,
+            background: 'rgba(10, 10, 10, 0.95)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(0, 255, 255, 0.3)',
+          }}
+        >
+          <Typography
+            variant="body2"
+            sx={{
+              color: '#f5f5f5',
+              fontWeight: 700,
+              mb: 0.5,
+            }}
+          >
             {payload[0].payload.fullName}
           </Typography>
-          <Typography variant="body2" sx={{ color: '#4caf50' }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: '#00ffaa',
+              fontFamily: '"JetBrains Mono", monospace',
+              display: 'block',
+            }}
+          >
             Total Return: {payload[0].value}%
           </Typography>
-          <Typography variant="body2" sx={{ color: '#2196f3' }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: '#00ffff',
+              fontFamily: '"JetBrains Mono", monospace',
+              display: 'block',
+            }}
+          >
             Sharpe Ratio: {payload[0].payload.sharpe}
           </Typography>
         </Paper>
@@ -116,31 +144,89 @@ export default function VisualizationPanel({ results }: VisualizationPanelProps)
   };
 
   return (
-    <Paper sx={{ p: 3, mt: 3 }}>
-      <Typography variant="h5" gutterBottom>
+    <Paper
+      sx={{
+        p: 3,
+        mt: 3,
+        position: 'relative',
+        overflow: 'hidden',
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '2px',
+          background: 'linear-gradient(90deg, #00ffff 0%, transparent 100%)',
+        },
+      }}
+    >
+      <Typography
+        variant="h5"
+        sx={{
+          fontWeight: 700,
+          color: '#f5f5f5',
+          mb: 3,
+        }}
+      >
         Performance Visualization
       </Typography>
 
       <Grid container spacing={3}>
         {/* Top 10 Bar Chart */}
         <Grid item xs={12}>
-          <Box sx={{ mt: 2 }}>
-            <Typography variant="h6" gutterBottom>
+          <Box
+            sx={{
+              p: 2,
+              background: 'rgba(30, 30, 30, 0.3)',
+              borderRadius: '12px',
+              border: '1px solid rgba(255, 255, 255, 0.05)',
+            }}
+          >
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 600,
+                color: '#f5f5f5',
+                mb: 2,
+              }}
+            >
               Top 10 Best Performing Strategies
             </Typography>
             <ResponsiveContainer width="100%" height={400}>
               <BarChart data={top10Data} margin={{ top: 20, right: 30, left: 20, bottom: 80 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.05)" />
                 <XAxis
                   dataKey="name"
                   angle={-45}
                   textAnchor="end"
                   height={100}
-                  stroke="#888"
+                  stroke="#b0b0b0"
+                  style={{
+                    fontSize: '12px',
+                    fontFamily: '"Manrope", sans-serif',
+                  }}
                 />
-                <YAxis stroke="#888" label={{ value: 'Total Return (%)', angle: -90, position: 'insideLeft' }} />
+                <YAxis
+                  stroke="#b0b0b0"
+                  label={{
+                    value: 'Total Return (%)',
+                    angle: -90,
+                    position: 'insideLeft',
+                    style: { fill: '#b0b0b0', fontFamily: '"Manrope", sans-serif' },
+                  }}
+                  style={{
+                    fontSize: '12px',
+                    fontFamily: '"Manrope", sans-serif',
+                  }}
+                />
                 <Tooltip content={<CustomTooltip />} />
-                <Legend />
+                <Legend
+                  wrapperStyle={{
+                    fontFamily: '"Manrope", sans-serif',
+                    color: '#b0b0b0',
+                  }}
+                />
                 <Bar dataKey="return" name="Total Return %" radius={[8, 8, 0, 0]}>
                   {top10Data.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={getBarColor(entry.return)} />
@@ -153,24 +239,53 @@ export default function VisualizationPanel({ results }: VisualizationPanelProps)
 
         {/* Category Performance */}
         <Grid item xs={12} md={6}>
-          <Box sx={{ mt: 2 }}>
-            <Typography variant="h6" gutterBottom>
+          <Box
+            sx={{
+              p: 2,
+              background: 'rgba(30, 30, 30, 0.3)',
+              borderRadius: '12px',
+              border: '1px solid rgba(255, 255, 255, 0.05)',
+            }}
+          >
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 600,
+                color: '#f5f5f5',
+                mb: 2,
+              }}
+            >
               Performance by Category
             </Typography>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={categoryData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.05)" />
                 <XAxis
                   dataKey="category"
                   angle={-45}
                   textAnchor="end"
                   height={80}
-                  stroke="#888"
+                  stroke="#b0b0b0"
+                  style={{
+                    fontSize: '12px',
+                    fontFamily: '"Manrope", sans-serif',
+                  }}
                 />
-                <YAxis stroke="#888" />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="avgReturn" name="Avg Return %" fill="#8884d8" radius={[8, 8, 0, 0]} />
+                <YAxis
+                  stroke="#b0b0b0"
+                  style={{
+                    fontSize: '12px',
+                    fontFamily: '"Manrope", sans-serif',
+                  }}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend
+                  wrapperStyle={{
+                    fontFamily: '"Manrope", sans-serif',
+                    color: '#b0b0b0',
+                  }}
+                />
+                <Bar dataKey="avgReturn" name="Avg Return %" fill="#00ffff" radius={[8, 8, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </Box>
@@ -178,8 +293,22 @@ export default function VisualizationPanel({ results }: VisualizationPanelProps)
 
         {/* Sharpe Ratio Comparison */}
         <Grid item xs={12} md={6}>
-          <Box sx={{ mt: 2 }}>
-            <Typography variant="h6" gutterBottom>
+          <Box
+            sx={{
+              p: 2,
+              background: 'rgba(30, 30, 30, 0.3)',
+              borderRadius: '12px',
+              border: '1px solid rgba(255, 255, 255, 0.05)',
+            }}
+          >
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 600,
+                color: '#f5f5f5',
+                mb: 2,
+              }}
+            >
               Risk-Adjusted Returns (Sharpe Ratio)
             </Typography>
             <ResponsiveContainer width="100%" height={300}>
@@ -187,18 +316,33 @@ export default function VisualizationPanel({ results }: VisualizationPanelProps)
                 data={sortedByReturn.slice(0, 5)}
                 margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.05)" />
                 <XAxis
                   dataKey="name"
                   angle={-45}
                   textAnchor="end"
                   height={80}
-                  stroke="#888"
+                  stroke="#b0b0b0"
+                  style={{
+                    fontSize: '12px',
+                    fontFamily: '"Manrope", sans-serif',
+                  }}
                 />
-                <YAxis stroke="#888" />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="sharpe" name="Sharpe Ratio" fill="#82ca9d" radius={[8, 8, 0, 0]} />
+                <YAxis
+                  stroke="#b0b0b0"
+                  style={{
+                    fontSize: '12px',
+                    fontFamily: '"Manrope", sans-serif',
+                  }}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend
+                  wrapperStyle={{
+                    fontFamily: '"Manrope", sans-serif',
+                    color: '#b0b0b0',
+                  }}
+                />
+                <Bar dataKey="sharpe" name="Sharpe Ratio" fill="#00ffaa" radius={[8, 8, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </Box>
