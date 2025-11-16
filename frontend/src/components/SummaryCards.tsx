@@ -25,35 +25,37 @@ export default function SummaryCards({ results, ticker }: SummaryCardsProps) {
   }
 
   // Calculate summary statistics
-  const bestStrategy = results.reduce((best, current) =>
-    current.total_return > best.total_return ? current : best
-  , results[0]);
+  const bestStrategy = results.reduce((best, current) => {
+    if (!best || !current) return best || current;
+    return (current.total_return ?? -Infinity) > (best.total_return ?? -Infinity) ? current : best;
+  }, results[0]);
 
-  const bestSharpe = results.reduce((best, current) =>
-    current.sharpe_ratio > best.sharpe_ratio ? current : best
-  , results[0]);
+  const bestSharpe = results.reduce((best, current) => {
+    if (!best || !current) return best || current;
+    return (current.sharpe_ratio ?? -Infinity) > (best.sharpe_ratio ?? -Infinity) ? current : best;
+  }, results[0]);
 
-  const profitableStrategies = results.filter(r => r.total_return > 0).length;
+  const profitableStrategies = results.filter(r => (r?.total_return ?? 0) > 0).length;
   const profitablePercentage = ((profitableStrategies / results.length) * 100).toFixed(1);
 
-  const avgReturn = (results.reduce((sum, r) => sum + r.total_return, 0) / results.length).toFixed(2);
-  const avgSharpe = (results.reduce((sum, r) => sum + r.sharpe_ratio, 0) / results.length).toFixed(2);
+  const avgReturn = (results.reduce((sum, r) => sum + (r?.total_return ?? 0), 0) / results.length).toFixed(2);
+  const avgSharpe = (results.reduce((sum, r) => sum + (r?.sharpe_ratio ?? 0), 0) / results.length).toFixed(2);
 
-  const totalTrades = results.reduce((sum, r) => sum + r.num_trades, 0);
+  const totalTrades = results.reduce((sum, r) => sum + (r?.num_trades ?? 0), 0);
 
   const cards = [
     {
       title: 'Best Strategy',
-      value: bestStrategy.strategy,
-      subtitle: `${bestStrategy.total_return > 0 ? '+' : ''}${bestStrategy.total_return.toFixed(2)}%`,
+      value: bestStrategy?.strategy || 'N/A',
+      subtitle: `${(bestStrategy?.total_return ?? 0) > 0 ? '+' : ''}${(bestStrategy?.total_return ?? 0).toFixed(2)}%`,
       icon: <TrendingUp />,
       color: '#00ffaa',
       gradient: 'linear-gradient(135deg, rgba(0, 255, 170, 0.15) 0%, rgba(0, 200, 140, 0.05) 100%)',
     },
     {
       title: 'Best Risk-Adjusted',
-      value: bestSharpe.strategy,
-      subtitle: `Sharpe: ${bestSharpe.sharpe_ratio.toFixed(2)}`,
+      value: bestSharpe?.strategy || 'N/A',
+      subtitle: `Sharpe: ${(bestSharpe?.sharpe_ratio ?? 0).toFixed(2)}`,
       icon: <ShowChart />,
       color: '#00ffff',
       gradient: 'linear-gradient(135deg, rgba(0, 255, 255, 0.15) 0%, rgba(0, 200, 200, 0.05) 100%)',

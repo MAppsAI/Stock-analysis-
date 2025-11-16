@@ -34,10 +34,25 @@ export default function StrategyDrilldown({
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
 
   useEffect(() => {
-    if (!open || !chartContainerRef.current) return;
+    if (!open || !priceData || priceData.length === 0) {
+      return;
+    }
 
-    // Create chart with glassmorphism theme
-    const chart = createChart(chartContainerRef.current, {
+    // Add a small delay to ensure Dialog content is fully mounted
+    const initTimer = setTimeout(() => {
+      if (!chartContainerRef.current) {
+        console.log('Chart container not ready');
+        return;
+      }
+
+      console.log('Initializing chart with data:', {
+        priceDataLength: priceData.length,
+        firstDate: priceData[0]?.date,
+        signalsLength: strategy.signals.length
+      });
+
+      // Create chart with glassmorphism theme
+      const chart = createChart(chartContainerRef.current, {
       width: chartContainerRef.current.clientWidth,
       height: 500,
       layout: {
@@ -73,44 +88,101 @@ export default function StrategyDrilldown({
 
     candlestickSeriesRef.current = candlestickSeries;
 
-    // Set candlestick data
-    const candleData = priceData.map((d) => ({
-      time: d.date,
-      open: d.open,
-      high: d.high,
-      low: d.low,
-      close: d.close,
-    }));
-    candlestickSeries.setData(candleData);
-
-    // Add buy/sell markers with new colors
-    const markers = strategy.signals.map((signal) => ({
-      time: signal.date,
-      position: signal.type === 'buy' ? 'belowBar' : 'aboveBar',
-      color: signal.type === 'buy' ? '#00ffff' : '#ff0055',
-      shape: signal.type === 'buy' ? 'arrowUp' : 'arrowDown',
-      text: signal.type === 'buy' ? 'BUY' : 'SELL',
-    }));
-
-    candlestickSeries.setMarkers(markers as any);
-
-    // Fit content
-    chart.timeScale().fitContent();
-
-    // Handle resize
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-        });
+    // Helper function to convert date string to proper format for lightweight-charts
+    const formatDateForChart = (dateStr: string): string => {
+      // If it's already in YYYY-MM-DD format, return as is
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        return dateStr;
       }
+
+      // Try to parse and convert to YYYY-MM-DD
+      try {
+        const date = new Date(dateStr);
+        if (!isNaN(date.getTime())) {
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        }
+      } catch (e) {
+        console.error('Error parsing date:', dateStr, e);
+      }
+
+      return dateStr;
     };
 
-    window.addEventListener('resize', handleResize);
+    // Set candlestick data with proper formatting and validation
+    const candleData = priceData
+      .filter(d => d && d.date && !isNaN(d.open) && !isNaN(d.high) && !isNaN(d.low) && !isNaN(d.close))
+      .map((d) => ({
+        time: formatDateForChart(d.date),
+        open: Number(d.open),
+        high: Number(d.high),
+        low: Number(d.low),
+        close: Number(d.close),
+      }))
+      .sort((a, b) => a.time.localeCompare(b.time)); // Ensure data is sorted by date
+
+    console.log('Candlestick data prepared:', {
+      length: candleData.length,
+      firstPoint: candleData[0],
+      lastPoint: candleData[candleData.length - 1]
+    });
+
+    if (candleData.length > 0) {
+      candlestickSeries.setData(candleData);
+    } else {
+      console.warn('No valid candlestick data to display');
+    }
+
+    // Add buy/sell markers with new colors
+    if (strategy.signals && strategy.signals.length > 0) {
+      const markers = strategy.signals
+        .filter(signal => signal && signal.date)
+        .map((signal) => ({
+          time: formatDateForChart(signal.date),
+          position: (signal.type === 'buy' ? 'belowBar' : 'aboveBar') as 'belowBar' | 'aboveBar',
+          color: signal.type === 'buy' ? '#00ffff' : '#ff0055',
+          shape: (signal.type === 'buy' ? 'arrowUp' : 'arrowDown') as 'arrowUp' | 'arrowDown',
+          text: signal.type === 'buy' ? 'BUY' : 'SELL',
+        }));
+
+      console.log('Markers prepared:', markers.length);
+      candlestickSeries.setMarkers(markers);
+    }
+
+      // Fit content with a small delay to ensure chart is ready
+      setTimeout(() => {
+        chart.timeScale().fitContent();
+      }, 100);
+
+      // Handle resize
+      const handleResize = () => {
+        if (chartContainerRef.current) {
+          chart.applyOptions({
+            width: chartContainerRef.current.clientWidth,
+          });
+        }
+      };
+
+      window.addEventListener('resize', handleResize);
+
+      // Store cleanup function
+      chartRef.current = chart;
+
+      // Cleanup will be handled by the outer return
+      return () => {
+        window.removeEventListener('resize', handleResize);
+        chart.remove();
+      };
+    }, 50); // 50ms delay to ensure Dialog is mounted
 
     return () => {
-      window.removeEventListener('resize', handleResize);
-      chart.remove();
+      clearTimeout(initTimer);
+      if (chartRef.current) {
+        chartRef.current.remove();
+        chartRef.current = null;
+      }
     };
   }, [open, priceData, strategy]);
 
