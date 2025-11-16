@@ -405,6 +405,166 @@ def calculate_vpt(data: pd.DataFrame) -> Tuple[pd.Series, List[dict]]:
     return data['Signal'], extract_signals(data)
 
 
+# =============================================================================
+# ADDITIONAL STRATEGIES FOR V3.0
+# =============================================================================
+
+def calculate_ichimoku(data: pd.DataFrame) -> Tuple[pd.Series, List[dict]]:
+    """Ichimoku Cloud - Japanese trend indicator"""
+    # Tenkan-sen (Conversion Line): (9-period high + 9-period low)/2
+    nine_period_high = data['High'].rolling(window=9).max()
+    nine_period_low = data['Low'].rolling(window=9).min()
+    data['Tenkan'] = (nine_period_high + nine_period_low) / 2
+
+    # Kijun-sen (Base Line): (26-period high + 26-period low)/2
+    period26_high = data['High'].rolling(window=26).max()
+    period26_low = data['Low'].rolling(window=26).min()
+    data['Kijun'] = (period26_high + period26_low) / 2
+
+    data['Signal'] = 0
+    data.loc[data['Tenkan'] > data['Kijun'], 'Signal'] = 1
+    data.loc[data['Tenkan'] < data['Kijun'], 'Signal'] = -1
+    data['Position'] = data['Signal'].diff()
+    return data['Signal'], extract_signals(data)
+
+
+def calculate_vwap_cross(data: pd.DataFrame) -> Tuple[pd.Series, List[dict]]:
+    """VWAP Cross - Volume Weighted Average Price"""
+    data['VWAP'] = (data['Volume'] * (data['High'] + data['Low'] + data['Close']) / 3).cumsum() / data['Volume'].cumsum()
+    data['Signal'] = 0
+    data.loc[data['Close'] > data['VWAP'], 'Signal'] = 1
+    data.loc[data['Close'] < data['VWAP'], 'Signal'] = -1
+    data['Position'] = data['Signal'].diff()
+    return data['Signal'], extract_signals(data)
+
+
+def calculate_sma_cross_10_20(data: pd.DataFrame) -> Tuple[pd.Series, List[dict]]:
+    """SMA 10/20 Cross - Short-term crossover"""
+    data['SMA_Short'] = data['Close'].rolling(window=10).mean()
+    data['SMA_Long'] = data['Close'].rolling(window=20).mean()
+    data['Signal'] = 0
+    data.loc[data['SMA_Short'] > data['SMA_Long'], 'Signal'] = 1
+    data.loc[data['SMA_Short'] < data['SMA_Long'], 'Signal'] = -1
+    data['Position'] = data['Signal'].diff()
+    return data['Signal'], extract_signals(data)
+
+
+def calculate_ema_cross_8_21(data: pd.DataFrame) -> Tuple[pd.Series, List[dict]]:
+    """EMA 8/21 Cross - Fibonacci-based crossover"""
+    data['EMA_Short'] = data['Close'].ewm(span=8, adjust=False).mean()
+    data['EMA_Long'] = data['Close'].ewm(span=21, adjust=False).mean()
+    data['Signal'] = 0
+    data.loc[data['EMA_Short'] > data['EMA_Long'], 'Signal'] = 1
+    data.loc[data['EMA_Short'] < data['EMA_Long'], 'Signal'] = -1
+    data['Position'] = data['Signal'].diff()
+    return data['Signal'], extract_signals(data)
+
+
+def calculate_price_above_vwap(data: pd.DataFrame) -> Tuple[pd.Series, List[dict]]:
+    """Price Above VWAP - Intraday indicator"""
+    data['VWAP'] = (data['Volume'] * (data['High'] + data['Low'] + data['Close']) / 3).cumsum() / data['Volume'].cumsum()
+    data['Signal'] = 0
+    data.loc[data['Close'] > data['VWAP'], 'Signal'] = 1
+    data.loc[data['Close'] < data['VWAP'], 'Signal'] = -1
+    data['Position'] = data['Signal'].diff()
+    return data['Signal'], extract_signals(data)
+
+
+def calculate_macd_histogram(data: pd.DataFrame) -> Tuple[pd.Series, List[dict]]:
+    """MACD Histogram - Trade histogram crosses"""
+    ema_12 = data['Close'].ewm(span=12, adjust=False).mean()
+    ema_26 = data['Close'].ewm(span=26, adjust=False).mean()
+    data['MACD'] = ema_12 - ema_26
+    data['Signal_Line'] = data['MACD'].ewm(span=9, adjust=False).mean()
+    data['Histogram'] = data['MACD'] - data['Signal_Line']
+    data['Signal'] = 0
+    data.loc[data['Histogram'] > 0, 'Signal'] = 1
+    data.loc[data['Histogram'] < 0, 'Signal'] = -1
+    data['Position'] = data['Signal'].diff()
+    return data['Signal'], extract_signals(data)
+
+
+def calculate_supertrend(data: pd.DataFrame) -> Tuple[pd.Series, List[dict]]:
+    """Supertrend - ATR-based trend following"""
+    period = 10
+    multiplier = 3
+
+    # Calculate ATR
+    data['H-L'] = data['High'] - data['Low']
+    data['H-PC'] = abs(data['High'] - data['Close'].shift(1))
+    data['L-PC'] = abs(data['Low'] - data['Close'].shift(1))
+    data['TR'] = data[['H-L', 'H-PC', 'L-PC']].max(axis=1)
+    data['ATR'] = data['TR'].rolling(window=period).mean()
+
+    # Calculate bands
+    data['HL2'] = (data['High'] + data['Low']) / 2
+    data['Upper_ST'] = data['HL2'] + (multiplier * data['ATR'])
+    data['Lower_ST'] = data['HL2'] - (multiplier * data['ATR'])
+
+    data['Signal'] = 0
+    data.loc[data['Close'] > data['Lower_ST'], 'Signal'] = 1
+    data.loc[data['Close'] < data['Upper_ST'], 'Signal'] = -1
+    data['Signal'] = data['Signal'].replace(0, method='ffill').fillna(0)
+    data['Position'] = data['Signal'].diff()
+    return data['Signal'], extract_signals(data)
+
+
+def calculate_hull_ma(data: pd.DataFrame) -> Tuple[pd.Series, List[dict]]:
+    """Hull Moving Average - Reduced lag MA"""
+    period = 20
+    wma_half = data['Close'].rolling(window=int(period/2)).mean()
+    wma_full = data['Close'].rolling(window=period).mean()
+    raw_hma = 2 * wma_half - wma_full
+    data['HMA'] = raw_hma.rolling(window=int(np.sqrt(period))).mean()
+    data['Signal'] = 0
+    data.loc[data['Close'] > data['HMA'], 'Signal'] = 1
+    data.loc[data['Close'] < data['HMA'], 'Signal'] = -1
+    data['Position'] = data['Signal'].diff()
+    return data['Signal'], extract_signals(data)
+
+
+def calculate_dmi_cross(data: pd.DataFrame) -> Tuple[pd.Series, List[dict]]:
+    """DMI Cross - Directional Movement Index crossover"""
+    period = 14
+    data['H-L'] = data['High'] - data['Low']
+    data['H-PC'] = abs(data['High'] - data['Close'].shift(1))
+    data['L-PC'] = abs(data['Low'] - data['Close'].shift(1))
+    data['TR'] = data[['H-L', 'H-PC', 'L-PC']].max(axis=1)
+    data['DMplus'] = np.where((data['High'] - data['High'].shift(1)) > (data['Low'].shift(1) - data['Low']),
+                              data['High'] - data['High'].shift(1), 0)
+    data['DMplus'] = np.where(data['DMplus'] < 0, 0, data['DMplus'])
+    data['DMminus'] = np.where((data['Low'].shift(1) - data['Low']) > (data['High'] - data['High'].shift(1)),
+                               data['Low'].shift(1) - data['Low'], 0)
+    data['DMminus'] = np.where(data['DMminus'] < 0, 0, data['DMminus'])
+    data['TR_EMA'] = data['TR'].ewm(span=period, adjust=False).mean()
+    data['DMplus_EMA'] = data['DMplus'].ewm(span=period, adjust=False).mean()
+    data['DMminus_EMA'] = data['DMminus'].ewm(span=period, adjust=False).mean()
+    data['DIplus'] = 100 * (data['DMplus_EMA'] / data['TR_EMA'])
+    data['DIminus'] = 100 * (data['DMminus_EMA'] / data['TR_EMA'])
+    data['Signal'] = 0
+    data.loc[data['DIplus'] > data['DIminus'], 'Signal'] = 1
+    data.loc[data['DIplus'] < data['DIminus'], 'Signal'] = -1
+    data['Position'] = data['Signal'].diff()
+    return data['Signal'], extract_signals(data)
+
+
+def calculate_aroon(data: pd.DataFrame) -> Tuple[pd.Series, List[dict]]:
+    """Aroon Indicator - Trend strength and direction"""
+    period = 25
+    data['Aroon_Up'] = data['High'].rolling(window=period + 1).apply(lambda x: x.argmax(), raw=False) / period * 100
+    data['Aroon_Down'] = data['Low'].rolling(window=period + 1).apply(lambda x: x.argmin(), raw=False) / period * 100
+    data['Signal'] = 0
+    data.loc[data['Aroon_Up'] > data['Aroon_Down'], 'Signal'] = 1
+    data.loc[data['Aroon_Up'] < data['Aroon_Down'], 'Signal'] = -1
+    data['Position'] = data['Signal'].diff()
+    return data['Signal'], extract_signals(data)
+
+
+# =============================================================================
+# VOLUME STRATEGIES
+# =============================================================================
+
+
 def calculate_metrics(data: pd.DataFrame, signals: pd.Series) -> dict:
     """Calculate performance metrics for a strategy"""
     data['Returns'] = data['Close'].pct_change()
@@ -441,17 +601,24 @@ def calculate_metrics(data: pd.DataFrame, signals: pd.Series) -> dict:
 
 # Strategy mapping with categories
 STRATEGY_MAP = {
-    # Trend-Following
+    # Trend-Following (15 strategies)
     'sma_cross_50_200': {'name': 'SMA 50/200 Cross', 'func': calculate_sma_cross_50_200, 'category': 'Trend-Following'},
     'sma_cross_20_50': {'name': 'SMA 20/50 Cross', 'func': calculate_sma_cross_20_50, 'category': 'Trend-Following'},
+    'sma_cross_10_20': {'name': 'SMA 10/20 Cross', 'func': calculate_sma_cross_10_20, 'category': 'Trend-Following'},
     'ema_cross': {'name': 'EMA 12/26 Cross', 'func': calculate_ema_cross, 'category': 'Trend-Following'},
+    'ema_cross_8_21': {'name': 'EMA 8/21 Cross', 'func': calculate_ema_cross_8_21, 'category': 'Trend-Following'},
     'macd': {'name': 'MACD Crossover', 'func': calculate_macd, 'category': 'Trend-Following'},
+    'macd_histogram': {'name': 'MACD Histogram', 'func': calculate_macd_histogram, 'category': 'Trend-Following'},
     'triple_ma': {'name': 'Triple Moving Average', 'func': calculate_triple_ma, 'category': 'Trend-Following'},
     'donchian': {'name': 'Donchian Breakout', 'func': calculate_donchian_breakout, 'category': 'Trend-Following'},
     'adx_trend': {'name': 'ADX Trend', 'func': calculate_adx_trend, 'category': 'Trend-Following'},
     'trend_channel': {'name': 'Trend Channel', 'func': calculate_trend_channel, 'category': 'Trend-Following'},
+    'supertrend': {'name': 'Supertrend', 'func': calculate_supertrend, 'category': 'Trend-Following'},
+    'hull_ma': {'name': 'Hull Moving Average', 'func': calculate_hull_ma, 'category': 'Trend-Following'},
+    'dmi_cross': {'name': 'DMI Cross', 'func': calculate_dmi_cross, 'category': 'Trend-Following'},
+    'aroon': {'name': 'Aroon Indicator', 'func': calculate_aroon, 'category': 'Trend-Following'},
 
-    # Mean-Reversion
+    # Mean-Reversion (6 strategies)
     'rsi': {'name': 'RSI Oversold/Overbought', 'func': calculate_rsi, 'category': 'Mean-Reversion'},
     'bollinger': {'name': 'Bollinger Bands', 'func': calculate_bollinger_bands, 'category': 'Mean-Reversion'},
     'mean_reversion': {'name': 'Mean Reversion', 'func': calculate_mean_reversion, 'category': 'Mean-Reversion'},
@@ -459,20 +626,25 @@ STRATEGY_MAP = {
     'cci': {'name': 'CCI', 'func': calculate_cci, 'category': 'Mean-Reversion'},
     'williams_r': {'name': 'Williams %R', 'func': calculate_williams_r, 'category': 'Mean-Reversion'},
 
-    # Momentum
+    # Momentum (5 strategies)
     'roc': {'name': 'Rate of Change', 'func': calculate_roc, 'category': 'Momentum'},
     'rsi_momentum': {'name': 'RSI Momentum', 'func': calculate_rsi_momentum, 'category': 'Momentum'},
     'breakout_52w': {'name': '52-Week High Breakout', 'func': calculate_breakout_52w, 'category': 'Momentum'},
     'ma_momentum': {'name': 'MA Momentum', 'func': calculate_ma_momentum, 'category': 'Momentum'},
     'price_momentum': {'name': 'Price Momentum', 'func': calculate_price_momentum, 'category': 'Momentum'},
 
-    # Volatility
+    # Volatility (3 strategies)
     'atr_breakout': {'name': 'ATR Breakout', 'func': calculate_atr_breakout, 'category': 'Volatility'},
     'bollinger_squeeze': {'name': 'Bollinger Squeeze', 'func': calculate_bollinger_squeeze, 'category': 'Volatility'},
     'keltner': {'name': 'Keltner Channel', 'func': calculate_keltner_channel, 'category': 'Volatility'},
 
-    # Volume
+    # Volume (5 strategies)
     'volume_breakout': {'name': 'Volume Breakout', 'func': calculate_volume_breakout, 'category': 'Volume'},
     'obv': {'name': 'On-Balance Volume', 'func': calculate_obv, 'category': 'Volume'},
     'vpt': {'name': 'Volume Price Trend', 'func': calculate_vpt, 'category': 'Volume'},
+    'vwap_cross': {'name': 'VWAP Cross', 'func': calculate_vwap_cross, 'category': 'Volume'},
+    'price_above_vwap': {'name': 'Price Above VWAP', 'func': calculate_price_above_vwap, 'category': 'Volume'},
+
+    # Advanced/Hybrid (2 strategies)
+    'ichimoku': {'name': 'Ichimoku Cloud', 'func': calculate_ichimoku, 'category': 'Advanced'},
 }

@@ -11,17 +11,18 @@ import {
   SelectChangeEvent,
   Alert,
 } from '@mui/material';
-import { PlayArrow } from '@mui/icons-material';
+import { PlayArrow, TuneOutlined } from '@mui/icons-material';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { api } from '../api';
-import { BacktestResponse } from '../types';
+import { BacktestResponse, OptimizationResponse } from '../types';
 
 interface ControlPanelProps {
   onBacktestComplete: (data: BacktestResponse) => void;
+  onOptimizationComplete: (data: OptimizationResponse) => void;
   setIsLoading: (loading: boolean) => void;
 }
 
-export default function ControlPanel({ onBacktestComplete, setIsLoading }: ControlPanelProps) {
+export default function ControlPanel({ onBacktestComplete, onOptimizationComplete, setIsLoading }: ControlPanelProps) {
   const [ticker, setTicker] = useState('AAPL');
   const [startDate, setStartDate] = useState('2022-01-01');
   const [endDate, setEndDate] = useState('2023-12-31');
@@ -44,6 +45,18 @@ export default function ControlPanel({ onBacktestComplete, setIsLoading }: Contr
     },
   });
 
+  const optimizationMutation = useMutation({
+    mutationFn: api.runOptimization,
+    onSuccess: (data) => {
+      setIsLoading(false);
+      onOptimizationComplete(data);
+    },
+    onError: (error) => {
+      setIsLoading(false);
+      console.error('Optimization failed:', error);
+    },
+  });
+
   const handleStrategyChange = (event: SelectChangeEvent<string[]>) => {
     const value = event.target.value;
     setSelectedStrategies(typeof value === 'string' ? value.split(',') : value);
@@ -56,6 +69,20 @@ export default function ControlPanel({ onBacktestComplete, setIsLoading }: Contr
 
     setIsLoading(true);
     backtestMutation.mutate({
+      ticker: ticker.toUpperCase(),
+      startDate,
+      endDate,
+      strategies: selectedStrategies,
+    });
+  };
+
+  const handleRunOptimization = () => {
+    if (!ticker || !startDate || !endDate || selectedStrategies.length === 0) {
+      return;
+    }
+
+    setIsLoading(true);
+    optimizationMutation.mutate({
       ticker: ticker.toUpperCase(),
       startDate,
       endDate,
@@ -114,16 +141,36 @@ export default function ControlPanel({ onBacktestComplete, setIsLoading }: Contr
           </Alert>
         )}
 
-        <Button
-          variant="contained"
-          size="large"
-          startIcon={<PlayArrow />}
-          onClick={handleRunBacktest}
-          disabled={backtestMutation.isPending || !ticker || selectedStrategies.length === 0}
-          sx={{ alignSelf: 'flex-start' }}
-        >
-          Run Backtest
-        </Button>
+        {optimizationMutation.isError && (
+          <Alert severity="error">
+            Failed to run optimization. Please check your inputs and try again.
+          </Alert>
+        )}
+
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="contained"
+            size="large"
+            startIcon={<PlayArrow />}
+            onClick={handleRunBacktest}
+            disabled={backtestMutation.isPending || optimizationMutation.isPending || !ticker || selectedStrategies.length === 0}
+            sx={{ flex: 1 }}
+          >
+            Run Backtest
+          </Button>
+
+          <Button
+            variant="contained"
+            size="large"
+            color="secondary"
+            startIcon={<TuneOutlined />}
+            onClick={handleRunOptimization}
+            disabled={backtestMutation.isPending || optimizationMutation.isPending || !ticker || selectedStrategies.length === 0}
+            sx={{ flex: 1 }}
+          >
+            Optimize Parameters
+          </Button>
+        </Box>
       </Box>
     </Paper>
   );
