@@ -10,7 +10,7 @@ from models import (
     OptimizationRequest, OptimizationResponse,
     SaveHistoryRequest, SaveHistoryResponse, HistoryListResponse, HistoryDetail
 )
-from strategies import STRATEGY_MAP, calculate_metrics
+from strategies import STRATEGY_MAP, calculate_metrics, calculate_buy_hold_metrics
 from optimizer import optimize_multiple_strategies, generate_optimization_summary
 from database import db
 
@@ -105,6 +105,20 @@ async def run_backtest(request: BacktestRequest):
                 'volume': int(row['Volume'])
             })
 
+        # Calculate buy and hold metrics (baseline for comparison)
+        buy_hold_data = data.copy()
+        buy_hold_metrics = calculate_buy_hold_metrics(buy_hold_data)
+        buy_hold_result = StrategyResult(
+            strategy="Buy & Hold",
+            total_return=buy_hold_metrics['total_return'],
+            win_rate=buy_hold_metrics['win_rate'],
+            max_drawdown=buy_hold_metrics['max_drawdown'],
+            sharpe_ratio=buy_hold_metrics['sharpe_ratio'],
+            num_trades=buy_hold_metrics['num_trades'],
+            signals=[],  # No trade signals for buy and hold
+            equity_curve=[EquityPoint(**point) for point in buy_hold_metrics['equity_curve']]
+        )
+
         # Run backtests for each requested strategy
         results = []
         for strategy_id in request.strategies:
@@ -141,7 +155,8 @@ async def run_backtest(request: BacktestRequest):
             startDate=request.startDate,
             endDate=request.endDate,
             results=results,
-            price_data=price_data
+            price_data=price_data,
+            buy_hold_result=buy_hold_result
         )
 
     except HTTPException:

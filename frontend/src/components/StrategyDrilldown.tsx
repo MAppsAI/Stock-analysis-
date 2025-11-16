@@ -20,6 +20,7 @@ interface StrategyDrilldownProps {
   strategy: StrategyResult;
   priceData: PriceData[];
   ticker: string;
+  buyHoldResult?: StrategyResult;
 }
 
 export default function StrategyDrilldown({
@@ -28,6 +29,7 @@ export default function StrategyDrilldown({
   strategy,
   priceData,
   ticker,
+  buyHoldResult,
 }: StrategyDrilldownProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const equityChartContainerRef = useRef<HTMLDivElement>(null);
@@ -90,6 +92,22 @@ export default function StrategyDrilldown({
 
     candlestickSeriesRef.current = candlestickSeries;
 
+    // Add volume histogram
+    const volumeSeries = chart.addHistogramSeries({
+      color: '#26a69a',
+      priceFormat: {
+        type: 'volume',
+      },
+      priceScaleId: '',
+    });
+
+    chart.priceScale('').applyOptions({
+      scaleMargins: {
+        top: 0.7,
+        bottom: 0,
+      },
+    });
+
     // Helper function to convert date string to proper format for lightweight-charts
     const formatDateForChart = (dateStr: string): string => {
       // If it's already in YYYY-MM-DD format, return as is
@@ -135,6 +153,20 @@ export default function StrategyDrilldown({
       candlestickSeries.setData(candleData);
     } else {
       console.warn('No valid candlestick data to display');
+    }
+
+    // Set volume data with color based on price direction
+    const volumeData = priceData
+      .filter(d => d && d.date && !isNaN(d.volume))
+      .map((d) => ({
+        time: formatDateForChart(d.date),
+        value: Number(d.volume),
+        color: d.close >= d.open ? 'rgba(0, 255, 170, 0.4)' : 'rgba(255, 0, 85, 0.4)',
+      }))
+      .sort((a, b) => a.time.localeCompare(b.time));
+
+    if (volumeData.length > 0) {
+      volumeSeries.setData(volumeData);
     }
 
     // Add buy/sell markers with new colors
@@ -185,7 +217,31 @@ export default function StrategyDrilldown({
 
         equityChartRef.current = equityChart;
 
-        // Add equity line series
+        // Add buy & hold baseline series (if available)
+        if (buyHoldResult && buyHoldResult.equity_curve && buyHoldResult.equity_curve.length > 0) {
+          const buyHoldSeries = equityChart.addLineSeries({
+            color: '#ffa500',
+            lineWidth: 2,
+            lineStyle: 2,  // Dashed line
+            priceFormat: {
+              type: 'custom',
+              formatter: (price: number) => `${(price * 100).toFixed(2)}%`,
+            },
+            title: 'Buy & Hold',
+          });
+
+          const buyHoldData = buyHoldResult.equity_curve
+            .filter(point => point && point.date)
+            .map(point => ({
+              time: formatDateForChart(point.date),
+              value: point.equity,
+            }))
+            .sort((a, b) => a.time.localeCompare(b.time));
+
+          buyHoldSeries.setData(buyHoldData);
+        }
+
+        // Add strategy equity line series
         const equitySeries = equityChart.addLineSeries({
           color: '#00ffaa',
           lineWidth: 2,
@@ -193,6 +249,7 @@ export default function StrategyDrilldown({
             type: 'custom',
             formatter: (price: number) => `${(price * 100).toFixed(2)}%`,
           },
+          title: strategy.strategy,
         });
 
         // Set equity curve data

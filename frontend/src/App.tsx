@@ -280,6 +280,7 @@ function App() {
                 <Box sx={{ animation: 'fadeInUp 0.6s ease-out 0.3s backwards' }}>
                   <ResultsTable
                     results={backtestData.results}
+                    buyHoldResult={backtestData.buy_hold_result}
                     onStrategyClick={handleStrategyClick}
                   />
                 </Box>
@@ -302,6 +303,7 @@ function App() {
             strategy={selectedStrategy}
             priceData={backtestData?.price_data || optimizationData?.price_data || []}
             ticker={backtestData?.ticker || optimizationData?.ticker || ''}
+            buyHoldResult={backtestData?.buy_hold_result}
           />
         )}
         </Box>

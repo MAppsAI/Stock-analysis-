@@ -648,6 +648,49 @@ def calculate_metrics(data: pd.DataFrame, signals: pd.Series) -> dict:
     }
 
 
+def calculate_buy_hold_metrics(data: pd.DataFrame) -> dict:
+    """Calculate buy and hold performance metrics (baseline for comparison)"""
+    # Buy and hold means always holding a position (signal = 1)
+    data['Returns'] = data['Close'].pct_change()
+    returns = data['Returns'].dropna()
+
+    if len(returns) == 0:
+        return {
+            'total_return': 0.0,
+            'win_rate': 0.0,
+            'max_drawdown': 0.0,
+            'sharpe_ratio': 0.0,
+            'num_trades': 1,  # Buy once and hold
+            'equity_curve': []
+        }
+
+    total_return = (1 + returns).prod() - 1
+    winning_days = returns[returns > 0]
+    win_rate = len(winning_days) / len(returns) if len(returns) > 0 else 0
+    cumulative_returns = (1 + returns).cumprod()
+    running_max = cumulative_returns.expanding().max()
+    drawdown = (cumulative_returns - running_max) / running_max
+    max_drawdown = drawdown.min()
+    sharpe_ratio = np.sqrt(252) * returns.mean() / returns.std() if returns.std() > 0 else 0
+
+    # Build equity curve data points
+    equity_curve = []
+    for idx, value in cumulative_returns.items():
+        equity_curve.append({
+            'date': idx.strftime('%Y-%m-%d'),
+            'equity': float(value)
+        })
+
+    return {
+        'total_return': float(total_return * 100),
+        'win_rate': float(win_rate * 100),
+        'max_drawdown': float(max_drawdown * 100),
+        'sharpe_ratio': float(sharpe_ratio),
+        'num_trades': 1,
+        'equity_curve': equity_curve
+    }
+
+
 # =============================================================================
 # ENTRY/EXIT SEPARATION SYSTEM - Mix and Match Strategies
 # =============================================================================

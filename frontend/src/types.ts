@@ -35,6 +35,7 @@ export interface BacktestResponse {
   endDate: string;
   results: StrategyResult[];
   price_data: PriceData[];
+  buy_hold_result?: StrategyResult;  // Buy and hold baseline for comparison
 }
 
 export interface BacktestRequest {
