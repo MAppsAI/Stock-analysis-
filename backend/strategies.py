@@ -599,8 +599,366 @@ def calculate_metrics(data: pd.DataFrame, signals: pd.Series) -> dict:
     }
 
 
-# Strategy mapping with categories
-STRATEGY_MAP = {
+# =============================================================================
+# ENTRY/EXIT SEPARATION SYSTEM - Mix and Match Strategies
+# =============================================================================
+
+def combine_entry_exit(entry_func, exit_func):
+    """Combine an entry condition with an exit condition to create a complete strategy"""
+    def combined_strategy(data: pd.DataFrame) -> Tuple[pd.Series, List[dict]]:
+        # Calculate entry and exit conditions
+        entry_condition = entry_func(data)
+        exit_condition = exit_func(data)
+
+        # Initialize signal
+        data['Signal'] = 0
+        data['Entry_Flag'] = entry_condition
+        data['Exit_Flag'] = exit_condition
+
+        # Track position state
+        in_position = False
+        signals = []
+
+        for i in range(len(data)):
+            if not in_position and data['Entry_Flag'].iloc[i]:
+                # Enter position
+                data.loc[data.index[i], 'Signal'] = 1
+                in_position = True
+            elif in_position and data['Exit_Flag'].iloc[i]:
+                # Exit position
+                data.loc[data.index[i], 'Signal'] = -1
+                in_position = False
+            elif in_position:
+                # Stay in position
+                data.loc[data.index[i], 'Signal'] = 1
+            # else: stay out of position (Signal = 0)
+
+        # Convert to position changes
+        data['Position'] = data['Signal'].diff()
+
+        return data['Signal'], extract_signals(data)
+
+    return combined_strategy
+
+
+# =============================================================================
+# ENTRY CONDITIONS
+# =============================================================================
+
+def entry_sma_cross_bullish(data: pd.DataFrame, short=50, long=200) -> pd.Series:
+    """Entry when short SMA crosses above long SMA"""
+    data['SMA_Short'] = data['Close'].rolling(window=short).mean()
+    data['SMA_Long'] = data['Close'].rolling(window=long).mean()
+    return data['SMA_Short'] > data['SMA_Long']
+
+
+def entry_ema_cross_bullish(data: pd.DataFrame, short=12, long=26) -> pd.Series:
+    """Entry when short EMA crosses above long EMA"""
+    data['EMA_Short'] = data['Close'].ewm(span=short, adjust=False).mean()
+    data['EMA_Long'] = data['Close'].ewm(span=long, adjust=False).mean()
+    return data['EMA_Short'] > data['EMA_Long']
+
+
+def entry_rsi_oversold(data: pd.DataFrame, period=14, threshold=30) -> pd.Series:
+    """Entry when RSI is oversold"""
+    delta = data['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss
+    data['RSI'] = 100 - (100 / (1 + rs))
+    return data['RSI'] < threshold
+
+
+def entry_bollinger_lower(data: pd.DataFrame, period=20, std_dev=2) -> pd.Series:
+    """Entry when price touches lower Bollinger Band"""
+    data['SMA'] = data['Close'].rolling(window=period).mean()
+    data['STD'] = data['Close'].rolling(window=period).std()
+    data['Lower_BB'] = data['SMA'] - (std_dev * data['STD'])
+    return data['Close'] <= data['Lower_BB']
+
+
+def entry_macd_cross_bullish(data: pd.DataFrame) -> pd.Series:
+    """Entry when MACD crosses above signal line"""
+    ema_12 = data['Close'].ewm(span=12, adjust=False).mean()
+    ema_26 = data['Close'].ewm(span=26, adjust=False).mean()
+    data['MACD'] = ema_12 - ema_26
+    data['Signal_Line'] = data['MACD'].ewm(span=9, adjust=False).mean()
+    return data['MACD'] > data['Signal_Line']
+
+
+def entry_stochastic_oversold(data: pd.DataFrame, period=14, threshold=20) -> pd.Series:
+    """Entry when Stochastic is oversold"""
+    data['L14'] = data['Low'].rolling(window=period).min()
+    data['H14'] = data['High'].rolling(window=period).max()
+    data['%K'] = 100 * ((data['Close'] - data['L14']) / (data['H14'] - data['L14']))
+    return data['%K'] < threshold
+
+
+def entry_volume_breakout_bullish(data: pd.DataFrame, period=20, vol_mult=1.5) -> pd.Series:
+    """Entry on high volume with positive price change"""
+    data['Volume_MA'] = data['Volume'].rolling(window=period).mean()
+    data['Price_Change'] = data['Close'].pct_change()
+    return (data['Volume'] > data['Volume_MA'] * vol_mult) & (data['Price_Change'] > 0)
+
+
+def entry_donchian_breakout(data: pd.DataFrame, period=20) -> pd.Series:
+    """Entry on Donchian channel upper breakout"""
+    data['Upper'] = data['High'].rolling(window=period).max()
+    return data['Close'] >= data['Upper'].shift(1)
+
+
+def entry_price_above_vwap(data: pd.DataFrame) -> pd.Series:
+    """Entry when price crosses above VWAP"""
+    data['VWAP'] = (data['Volume'] * (data['High'] + data['Low'] + data['Close']) / 3).cumsum() / data['Volume'].cumsum()
+    return data['Close'] > data['VWAP']
+
+
+def entry_adx_strong_trend(data: pd.DataFrame, period=14, threshold=25) -> pd.Series:
+    """Entry when ADX shows strong trend and +DI > -DI"""
+    # Calculate True Range
+    data['H-L'] = data['High'] - data['Low']
+    data['H-PC'] = abs(data['High'] - data['Close'].shift(1))
+    data['L-PC'] = abs(data['Low'] - data['Close'].shift(1))
+    data['TR'] = data[['H-L', 'H-PC', 'L-PC']].max(axis=1)
+
+    # Calculate Directional Movement
+    data['DMplus'] = np.where((data['High'] - data['High'].shift(1)) > (data['Low'].shift(1) - data['Low']),
+                              data['High'] - data['High'].shift(1), 0)
+    data['DMplus'] = np.where(data['DMplus'] < 0, 0, data['DMplus'])
+    data['DMminus'] = np.where((data['Low'].shift(1) - data['Low']) > (data['High'] - data['High'].shift(1)),
+                               data['Low'].shift(1) - data['Low'], 0)
+    data['DMminus'] = np.where(data['DMminus'] < 0, 0, data['DMminus'])
+
+    data['TR_EMA'] = data['TR'].ewm(span=period, adjust=False).mean()
+    data['DMplus_EMA'] = data['DMplus'].ewm(span=period, adjust=False).mean()
+    data['DMminus_EMA'] = data['DMminus'].ewm(span=period, adjust=False).mean()
+
+    data['DIplus'] = 100 * (data['DMplus_EMA'] / data['TR_EMA'])
+    data['DIminus'] = 100 * (data['DMminus_EMA'] / data['TR_EMA'])
+
+    data['DX'] = 100 * abs(data['DIplus'] - data['DIminus']) / (data['DIplus'] + data['DIminus'])
+    data['ADX'] = data['DX'].ewm(span=period, adjust=False).mean()
+
+    return (data['ADX'] > threshold) & (data['DIplus'] > data['DIminus'])
+
+
+def entry_cci_oversold(data: pd.DataFrame, period=20, threshold=-100) -> pd.Series:
+    """Entry when CCI is oversold"""
+    data['TP'] = (data['High'] + data['Low'] + data['Close']) / 3
+    data['SMA_TP'] = data['TP'].rolling(window=period).mean()
+    data['MAD'] = data['TP'].rolling(window=period).apply(lambda x: np.abs(x - x.mean()).mean())
+    data['CCI'] = (data['TP'] - data['SMA_TP']) / (0.015 * data['MAD'])
+    return data['CCI'] < threshold
+
+
+def entry_roc_positive(data: pd.DataFrame, period=12) -> pd.Series:
+    """Entry when Rate of Change is positive"""
+    data['ROC'] = ((data['Close'] - data['Close'].shift(period)) / data['Close'].shift(period)) * 100
+    return data['ROC'] > 0
+
+
+# =============================================================================
+# EXIT CONDITIONS
+# =============================================================================
+
+def exit_sma_cross_bearish(data: pd.DataFrame, short=50, long=200) -> pd.Series:
+    """Exit when short SMA crosses below long SMA"""
+    data['SMA_Short'] = data['Close'].rolling(window=short).mean()
+    data['SMA_Long'] = data['Close'].rolling(window=long).mean()
+    return data['SMA_Short'] < data['SMA_Long']
+
+
+def exit_ema_cross_bearish(data: pd.DataFrame, short=12, long=26) -> pd.Series:
+    """Exit when short EMA crosses below long EMA"""
+    data['EMA_Short'] = data['Close'].ewm(span=short, adjust=False).mean()
+    data['EMA_Long'] = data['Close'].ewm(span=long, adjust=False).mean()
+    return data['EMA_Short'] < data['EMA_Long']
+
+
+def exit_rsi_overbought(data: pd.DataFrame, period=14, threshold=70) -> pd.Series:
+    """Exit when RSI is overbought"""
+    delta = data['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss
+    data['RSI'] = 100 - (100 / (1 + rs))
+    return data['RSI'] > threshold
+
+
+def exit_bollinger_upper(data: pd.DataFrame, period=20, std_dev=2) -> pd.Series:
+    """Exit when price touches upper Bollinger Band"""
+    data['SMA'] = data['Close'].rolling(window=period).mean()
+    data['STD'] = data['Close'].rolling(window=period).std()
+    data['Upper_BB'] = data['SMA'] + (std_dev * data['STD'])
+    return data['Close'] >= data['Upper_BB']
+
+
+def exit_macd_cross_bearish(data: pd.DataFrame) -> pd.Series:
+    """Exit when MACD crosses below signal line"""
+    ema_12 = data['Close'].ewm(span=12, adjust=False).mean()
+    ema_26 = data['Close'].ewm(span=26, adjust=False).mean()
+    data['MACD'] = ema_12 - ema_26
+    data['Signal_Line'] = data['MACD'].ewm(span=9, adjust=False).mean()
+    return data['MACD'] < data['Signal_Line']
+
+
+def exit_stochastic_overbought(data: pd.DataFrame, period=14, threshold=80) -> pd.Series:
+    """Exit when Stochastic is overbought"""
+    data['L14'] = data['Low'].rolling(window=period).min()
+    data['H14'] = data['High'].rolling(window=period).max()
+    data['%K'] = 100 * ((data['Close'] - data['L14']) / (data['H14'] - data['L14']))
+    return data['%K'] > threshold
+
+
+def exit_volume_breakout_bearish(data: pd.DataFrame, period=20, vol_mult=1.5) -> pd.Series:
+    """Exit on high volume with negative price change"""
+    data['Volume_MA'] = data['Volume'].rolling(window=period).mean()
+    data['Price_Change'] = data['Close'].pct_change()
+    return (data['Volume'] > data['Volume_MA'] * vol_mult) & (data['Price_Change'] < 0)
+
+
+def exit_donchian_breakdown(data: pd.DataFrame, period=20) -> pd.Series:
+    """Exit on Donchian channel lower breakdown"""
+    data['Lower'] = data['Low'].rolling(window=period).min()
+    return data['Close'] <= data['Lower'].shift(1)
+
+
+def exit_price_below_vwap(data: pd.DataFrame) -> pd.Series:
+    """Exit when price crosses below VWAP"""
+    data['VWAP'] = (data['Volume'] * (data['High'] + data['Low'] + data['Close']) / 3).cumsum() / data['Volume'].cumsum()
+    return data['Close'] < data['VWAP']
+
+
+def exit_adx_weak_trend(data: pd.DataFrame, period=14, threshold=25) -> pd.Series:
+    """Exit when ADX shows weak trend or -DI > +DI"""
+    # Calculate True Range
+    data['H-L'] = data['High'] - data['Low']
+    data['H-PC'] = abs(data['High'] - data['Close'].shift(1))
+    data['L-PC'] = abs(data['Low'] - data['Close'].shift(1))
+    data['TR'] = data[['H-L', 'H-PC', 'L-PC']].max(axis=1)
+
+    # Calculate Directional Movement
+    data['DMplus'] = np.where((data['High'] - data['High'].shift(1)) > (data['Low'].shift(1) - data['Low']),
+                              data['High'] - data['High'].shift(1), 0)
+    data['DMplus'] = np.where(data['DMplus'] < 0, 0, data['DMplus'])
+    data['DMminus'] = np.where((data['Low'].shift(1) - data['Low']) > (data['High'] - data['High'].shift(1)),
+                               data['Low'].shift(1) - data['Low'], 0)
+    data['DMminus'] = np.where(data['DMminus'] < 0, 0, data['DMminus'])
+
+    data['TR_EMA'] = data['TR'].ewm(span=period, adjust=False).mean()
+    data['DMplus_EMA'] = data['DMplus'].ewm(span=period, adjust=False).mean()
+    data['DMminus_EMA'] = data['DMminus'].ewm(span=period, adjust=False).mean()
+
+    data['DIplus'] = 100 * (data['DMplus_EMA'] / data['TR_EMA'])
+    data['DIminus'] = 100 * (data['DMminus_EMA'] / data['TR_EMA'])
+
+    data['DX'] = 100 * abs(data['DIplus'] - data['DIminus']) / (data['DIplus'] + data['DIminus'])
+    data['ADX'] = data['DX'].ewm(span=period, adjust=False).mean()
+
+    return (data['ADX'] < threshold) | (data['DIplus'] < data['DIminus'])
+
+
+def exit_cci_overbought(data: pd.DataFrame, period=20, threshold=100) -> pd.Series:
+    """Exit when CCI is overbought"""
+    data['TP'] = (data['High'] + data['Low'] + data['Close']) / 3
+    data['SMA_TP'] = data['TP'].rolling(window=period).mean()
+    data['MAD'] = data['TP'].rolling(window=period).apply(lambda x: np.abs(x - x.mean()).mean())
+    data['CCI'] = (data['TP'] - data['SMA_TP']) / (0.015 * data['MAD'])
+    return data['CCI'] > threshold
+
+
+def exit_roc_negative(data: pd.DataFrame, period=12) -> pd.Series:
+    """Exit when Rate of Change is negative"""
+    data['ROC'] = ((data['Close'] - data['Close'].shift(period)) / data['Close'].shift(period)) * 100
+    return data['ROC'] < 0
+
+
+def exit_trailing_stop(data: pd.DataFrame, stop_pct=5.0) -> pd.Series:
+    """Exit on trailing stop loss"""
+    data['Trailing_High'] = data['Close'].expanding().max()
+    data['Stop_Level'] = data['Trailing_High'] * (1 - stop_pct / 100)
+    return data['Close'] < data['Stop_Level']
+
+
+def exit_take_profit(data: pd.DataFrame, profit_pct=10.0) -> pd.Series:
+    """Exit on take profit target"""
+    # This is a simplified version - in practice would need to track entry price
+    data['MA_20'] = data['Close'].rolling(window=20).mean()
+    data['Profit_Target'] = data['MA_20'] * (1 + profit_pct / 100)
+    return data['Close'] > data['Profit_Target']
+
+
+# =============================================================================
+# ENTRY/EXIT MAPPINGS
+# =============================================================================
+
+ENTRY_CONDITIONS = {
+    'sma_cross': {'name': 'SMA Cross', 'func': entry_sma_cross_bullish},
+    'ema_cross': {'name': 'EMA Cross', 'func': entry_ema_cross_bullish},
+    'rsi_oversold': {'name': 'RSI Oversold', 'func': entry_rsi_oversold},
+    'bollinger_lower': {'name': 'Bollinger Lower', 'func': entry_bollinger_lower},
+    'macd_cross': {'name': 'MACD Cross', 'func': entry_macd_cross_bullish},
+    'stochastic_oversold': {'name': 'Stochastic Oversold', 'func': entry_stochastic_oversold},
+    'volume_breakout': {'name': 'Volume Breakout', 'func': entry_volume_breakout_bullish},
+    'donchian_breakout': {'name': 'Donchian Breakout', 'func': entry_donchian_breakout},
+    'price_above_vwap': {'name': 'Price Above VWAP', 'func': entry_price_above_vwap},
+    'adx_strong': {'name': 'ADX Strong Trend', 'func': entry_adx_strong_trend},
+    'cci_oversold': {'name': 'CCI Oversold', 'func': entry_cci_oversold},
+    'roc_positive': {'name': 'ROC Positive', 'func': entry_roc_positive},
+}
+
+EXIT_CONDITIONS = {
+    'sma_cross': {'name': 'SMA Cross', 'func': exit_sma_cross_bearish},
+    'ema_cross': {'name': 'EMA Cross', 'func': exit_ema_cross_bearish},
+    'rsi_overbought': {'name': 'RSI Overbought', 'func': exit_rsi_overbought},
+    'bollinger_upper': {'name': 'Bollinger Upper', 'func': exit_bollinger_upper},
+    'macd_cross': {'name': 'MACD Cross', 'func': exit_macd_cross_bearish},
+    'stochastic_overbought': {'name': 'Stochastic Overbought', 'func': exit_stochastic_overbought},
+    'volume_breakout': {'name': 'Volume Breakout', 'func': exit_volume_breakout_bearish},
+    'donchian_breakdown': {'name': 'Donchian Breakdown', 'func': exit_donchian_breakdown},
+    'price_below_vwap': {'name': 'Price Below VWAP', 'func': exit_price_below_vwap},
+    'adx_weak': {'name': 'ADX Weak Trend', 'func': exit_adx_weak_trend},
+    'cci_overbought': {'name': 'CCI Overbought', 'func': exit_cci_overbought},
+    'roc_negative': {'name': 'ROC Negative', 'func': exit_roc_negative},
+    'trailing_stop': {'name': 'Trailing Stop', 'func': exit_trailing_stop},
+    'take_profit': {'name': 'Take Profit', 'func': exit_take_profit},
+}
+
+
+def generate_combined_strategies():
+    """Generate all combinations of entry and exit strategies"""
+    combined = {}
+
+    for entry_key, entry_info in ENTRY_CONDITIONS.items():
+        for exit_key, exit_info in EXIT_CONDITIONS.items():
+            # Create unique strategy ID
+            strategy_id = f"combo_{entry_key}_entry_{exit_key}_exit"
+
+            # Create strategy name
+            strategy_name = f"{entry_info['name']} Entry + {exit_info['name']} Exit"
+
+            # Determine category based on entry condition
+            if entry_key in ['sma_cross', 'ema_cross', 'macd_cross', 'adx_strong', 'donchian_breakout']:
+                category = 'Trend-Following'
+            elif entry_key in ['rsi_oversold', 'bollinger_lower', 'stochastic_oversold', 'cci_oversold']:
+                category = 'Mean-Reversion'
+            elif entry_key in ['roc_positive', 'volume_breakout']:
+                category = 'Momentum'
+            else:
+                category = 'Hybrid'
+
+            # Create combined strategy function
+            combined[strategy_id] = {
+                'name': strategy_name,
+                'func': combine_entry_exit(entry_info['func'], exit_info['func']),
+                'category': f'{category} (Combined)'
+            }
+
+    return combined
+
+
+# Original strategy mapping with categories
+ORIGINAL_STRATEGIES = {
     # Trend-Following (15 strategies)
     'sma_cross_50_200': {'name': 'SMA 50/200 Cross', 'func': calculate_sma_cross_50_200, 'category': 'Trend-Following'},
     'sma_cross_20_50': {'name': 'SMA 20/50 Cross', 'func': calculate_sma_cross_20_50, 'category': 'Trend-Following'},
@@ -648,3 +1006,10 @@ STRATEGY_MAP = {
     # Advanced/Hybrid (2 strategies)
     'ichimoku': {'name': 'Ichimoku Cloud', 'func': calculate_ichimoku, 'category': 'Advanced'},
 }
+
+# Generate combined strategies (Entry/Exit Mix & Match)
+# This creates 12 entry conditions × 14 exit conditions = 168 combined strategies
+COMBINED_STRATEGIES = generate_combined_strategies()
+
+# Merge all strategies into the final STRATEGY_MAP
+STRATEGY_MAP = {**ORIGINAL_STRATEGIES, **COMBINED_STRATEGIES}

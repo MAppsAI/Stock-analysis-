@@ -9,7 +9,7 @@ from models import BacktestRequest, BacktestResponse, StrategyResult, TradeSigna
 from strategies import STRATEGY_MAP, calculate_metrics
 from optimizer import optimize_multiple_strategies, generate_optimization_summary
 
-app = FastAPI(title="Stock Analysis API", version="3.5.0")
+app = FastAPI(title="Stock Analysis API", version="4.1.0")
 
 # Configure CORS
 app.add_middleware(
@@ -24,15 +24,25 @@ app.add_middleware(
 @app.get("/")
 def read_root():
     return {
-        "message": "Stock Analysis API v3.5 - 35 Strategies with Hyperparameter Optimization",
+        "message": "Stock Analysis API v4.1 - 200+ Strategies with Hyperparameter Optimization",
         "status": "running",
         "total_strategies": len(STRATEGY_MAP),
         "categories": len(set(s['category'] for s in STRATEGY_MAP.values())),
-        "features": ["Backtesting", "Parameter Optimization", "Parallel Processing"],
+        "features": [
+            "Backtesting",
+            "Hyperparameter Optimization (Original + Combined Strategies)",
+            "Parallel Processing",
+            "Entry/Exit Strategy Combinations (12 entries × 14 exits = 168 combinations)",
+            "Combined Strategy Optimization (Entry params × Exit params)"
+        ],
         "endpoints": {
             "/api/v1/backtest": "POST - Run backtest for selected strategies",
             "/api/v1/strategies": "GET - List available strategies",
-            "/api/v1/optimize": "POST - Optimize strategy parameters"
+            "/api/v1/optimize": "POST - Optimize strategy parameters (supports combined strategies)"
+        },
+        "optimization": {
+            "supported": "All 203 strategies (35 original + 168 combined)",
+            "example": "Optimize 'combo_rsi_oversold_entry_trailing_stop_exit' to find best RSI threshold and stop %"
         }
     }
 
