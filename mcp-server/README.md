@@ -9,7 +9,7 @@ A Model Context Protocol (MCP) server that wraps the Stock Analysis backend APIs
 - **Strategy Optimization**: Hyperparameter optimization with parallel processing
 - **Portfolio Analysis**: Correlation matrices, rebalancing, transaction costs, and tax-aware analysis
 - **History Management**: Save, retrieve, and manage analysis results
-- **LLM-Friendly Output**: All responses are formatted for easy consumption by language models
+- **LLM-Friendly Output**: Compact summaries with key metrics only (no large equity curves or detailed signals)
 
 ## Architecture
 
@@ -17,7 +17,7 @@ The MCP server acts as a wrapper layer that:
 1. Receives tool calls from LLM clients
 2. Translates them to backend API calls
 3. Formats responses in an LLM-friendly manner
-4. Returns both human-readable summaries and full JSON data
+4. Returns compact summaries with only essential metrics
 
 ```
 ┌─────────────┐
@@ -236,8 +236,8 @@ Run backtests on a stock with selected strategies.
 - `strategies` (array): List of strategy IDs
 
 **Returns:**
-- Human-readable summary with top performers
-- Full JSON data with metrics, signals, equity curves
+- Human-readable summary with key metrics and top performers
+- Does NOT include detailed signals or equity curves (keeps response compact)
 
 **Key Metrics:**
 - Total Return (%)

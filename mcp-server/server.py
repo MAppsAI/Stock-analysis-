@@ -507,16 +507,10 @@ async def call_tool(name: str, arguments: Any) -> List[TextContent]:
             response.raise_for_status()
             data = response.json()
 
-            # Return both summary and full data
+            # Return only summary, not full data
             summary = summarize_backtest_results(data)
 
-            return [
-                TextContent(type="text", text=summary),
-                TextContent(
-                    type="text",
-                    text=f"\n\n---\n\n**Full Results (JSON)**\n```json\n{json.dumps(data, indent=2)}\n```"
-                )
-            ]
+            return [TextContent(type="text", text=summary)]
 
         # Tool 3: Optimize Strategies
         elif name == "optimize_strategies":
@@ -536,13 +530,7 @@ async def call_tool(name: str, arguments: Any) -> List[TextContent]:
 
             summary = summarize_optimization_results(data)
 
-            return [
-                TextContent(type="text", text=summary),
-                TextContent(
-                    type="text",
-                    text=f"\n\n---\n\n**Full Results (JSON)**\n```json\n{json.dumps(data, indent=2)}\n```"
-                )
-            ]
+            return [TextContent(type="text", text=summary)]
 
         # Tool 4: List Portfolio Strategies
         elif name == "list_portfolio_strategies":
@@ -589,13 +577,7 @@ async def call_tool(name: str, arguments: Any) -> List[TextContent]:
 
             summary = summarize_portfolio_results(data)
 
-            return [
-                TextContent(type="text", text=summary),
-                TextContent(
-                    type="text",
-                    text=f"\n\n---\n\n**Full Results (JSON)**\n```json\n{json.dumps(data, indent=2)}\n```"
-                )
-            ]
+            return [TextContent(type="text", text=summary)]
 
         # Tool 6: Calculate Correlation
         elif name == "calculate_correlation":
@@ -640,13 +622,7 @@ async def call_tool(name: str, arguments: Any) -> List[TextContent]:
             for ticker, vol in volatilities.items():
                 output.append(f"- **{ticker}**: {format_percentage(vol)}")
 
-            return [
-                TextContent(type="text", text="\n".join(output)),
-                TextContent(
-                    type="text",
-                    text=f"\n\n---\n\n**Full Data (JSON)**\n```json\n{json.dumps(data, indent=2)}\n```"
-                )
-            ]
+            return [TextContent(type="text", text="\n".join(output))]
 
         # Tool 7: Save Analysis
         elif name == "save_analysis":
@@ -732,13 +708,7 @@ async def call_tool(name: str, arguments: Any) -> List[TextContent]:
             else:
                 summary = summarize_optimization_results(data['results_data'])
 
-            return [
-                TextContent(type="text", text="\n".join(output) + "\n" + summary),
-                TextContent(
-                    type="text",
-                    text=f"\n\n---\n\n**Full Data (JSON)**\n```json\n{json.dumps(data, indent=2)}\n```"
-                )
-            ]
+            return [TextContent(type="text", text="\n".join(output) + "\n" + summary)]
 
         # Tool 10: Delete History
         elif name == "delete_history":
