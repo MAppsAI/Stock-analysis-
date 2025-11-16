@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import List
 
 from models import (
-    BacktestRequest, BacktestResponse, StrategyResult, TradeSignal,
+    BacktestRequest, BacktestResponse, StrategyResult, TradeSignal, EquityPoint,
     OptimizationRequest, OptimizationResponse,
     SaveHistoryRequest, SaveHistoryResponse, HistoryListResponse, HistoryDetail
 )
@@ -131,7 +131,8 @@ async def run_backtest(request: BacktestRequest):
                 max_drawdown=metrics['max_drawdown'],
                 sharpe_ratio=metrics['sharpe_ratio'],
                 num_trades=metrics['num_trades'],
-                signals=[TradeSignal(**sig) for sig in trade_signals]
+                signals=[TradeSignal(**sig) for sig in trade_signals],
+                equity_curve=[EquityPoint(**point) for point in metrics['equity_curve']]
             )
             results.append(result)
 
