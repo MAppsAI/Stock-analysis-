@@ -9,7 +9,7 @@ from models import BacktestRequest, BacktestResponse, StrategyResult, TradeSigna
 from strategies import STRATEGY_MAP, calculate_metrics
 from optimizer import optimize_multiple_strategies, generate_optimization_summary
 
-app = FastAPI(title="Stock Analysis API", version="3.5.0")
+app = FastAPI(title="Stock Analysis API", version="4.0.0")
 
 # Configure CORS
 app.add_middleware(
@@ -24,11 +24,16 @@ app.add_middleware(
 @app.get("/")
 def read_root():
     return {
-        "message": "Stock Analysis API v3.5 - 35 Strategies with Hyperparameter Optimization",
+        "message": "Stock Analysis API v4.0 - 200+ Strategies with Entry/Exit Mix & Match",
         "status": "running",
         "total_strategies": len(STRATEGY_MAP),
         "categories": len(set(s['category'] for s in STRATEGY_MAP.values())),
-        "features": ["Backtesting", "Parameter Optimization", "Parallel Processing"],
+        "features": [
+            "Backtesting",
+            "Parameter Optimization",
+            "Parallel Processing",
+            "Entry/Exit Strategy Combinations (12 entries × 14 exits = 168 combinations)"
+        ],
         "endpoints": {
             "/api/v1/backtest": "POST - Run backtest for selected strategies",
             "/api/v1/strategies": "GET - List available strategies",
