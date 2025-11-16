@@ -30,7 +30,9 @@ export default function StrategyDrilldown({
   ticker,
 }: StrategyDrilldownProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
+  const equityChartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const equityChartRef = useRef<IChartApi | null>(null);
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
 
   useEffect(() => {
@@ -156,11 +158,90 @@ export default function StrategyDrilldown({
         chart.timeScale().fitContent();
       }, 100);
 
+      // Create equity curve chart
+      if (equityChartContainerRef.current && strategy.equity_curve && strategy.equity_curve.length > 0) {
+        const equityChart = createChart(equityChartContainerRef.current, {
+          width: equityChartContainerRef.current.clientWidth,
+          height: 250,
+          layout: {
+            background: { color: 'transparent' },
+            textColor: '#b0b0b0',
+          },
+          grid: {
+            vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
+            horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
+          },
+          crosshair: {
+            mode: 1,
+          },
+          rightPriceScale: {
+            borderColor: 'rgba(0, 255, 170, 0.2)',
+          },
+          timeScale: {
+            borderColor: 'rgba(0, 255, 170, 0.2)',
+            timeVisible: true,
+          },
+        });
+
+        equityChartRef.current = equityChart;
+
+        // Add equity line series
+        const equitySeries = equityChart.addLineSeries({
+          color: '#00ffaa',
+          lineWidth: 2,
+          priceFormat: {
+            type: 'custom',
+            formatter: (price: number) => `${(price * 100).toFixed(2)}%`,
+          },
+        });
+
+        // Set equity curve data
+        const equityData = strategy.equity_curve
+          .filter(point => point && point.date)
+          .map(point => ({
+            time: formatDateForChart(point.date),
+            value: point.equity,
+          }))
+          .sort((a, b) => a.time.localeCompare(b.time));
+
+        console.log('Equity curve data prepared:', {
+          length: equityData.length,
+          firstPoint: equityData[0],
+          lastPoint: equityData[equityData.length - 1]
+        });
+
+        equitySeries.setData(equityData);
+
+        // Synchronize time scales between charts
+        chart.timeScale().subscribeVisibleTimeRangeChange(() => {
+          const timeRange = chart.timeScale().getVisibleRange();
+          if (timeRange) {
+            equityChart.timeScale().setVisibleRange(timeRange);
+          }
+        });
+
+        equityChart.timeScale().subscribeVisibleTimeRangeChange(() => {
+          const timeRange = equityChart.timeScale().getVisibleRange();
+          if (timeRange) {
+            chart.timeScale().setVisibleRange(timeRange);
+          }
+        });
+
+        setTimeout(() => {
+          equityChart.timeScale().fitContent();
+        }, 100);
+      }
+
       // Handle resize
       const handleResize = () => {
         if (chartContainerRef.current) {
           chart.applyOptions({
             width: chartContainerRef.current.clientWidth,
+          });
+        }
+        if (equityChartContainerRef.current && equityChartRef.current) {
+          equityChartRef.current.applyOptions({
+            width: equityChartContainerRef.current.clientWidth,
           });
         }
       };
@@ -174,6 +255,9 @@ export default function StrategyDrilldown({
       return () => {
         window.removeEventListener('resize', handleResize);
         chart.remove();
+        if (equityChartRef.current) {
+          equityChartRef.current.remove();
+        }
       };
     }, 50); // 50ms delay to ensure Dialog is mounted
 
@@ -182,6 +266,10 @@ export default function StrategyDrilldown({
       if (chartRef.current) {
         chartRef.current.remove();
         chartRef.current = null;
+      }
+      if (equityChartRef.current) {
+        equityChartRef.current.remove();
+        equityChartRef.current = null;
       }
     };
   }, [open, priceData, strategy]);
@@ -436,10 +524,10 @@ export default function StrategyDrilldown({
           >
             Price Chart with Buy/Sell Signals
           </Typography>
-          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+          <Box sx={{ display: 'flex', gap: 1, mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
             <Chip
               icon={<TrendingUp fontSize="small" />}
-              label="BUY Signal"
+              label="BUY = Long Entry"
               size="small"
               sx={{
                 background: 'linear-gradient(135deg, rgba(0, 255, 255, 0.2) 0%, rgba(0, 200, 200, 0.1) 100%)',
@@ -450,7 +538,7 @@ export default function StrategyDrilldown({
             />
             <Chip
               icon={<TrendingDown fontSize="small" />}
-              label="SELL Signal"
+              label="SELL = Exit Long"
               size="small"
               sx={{
                 background: 'linear-gradient(135deg, rgba(255, 0, 85, 0.2) 0%, rgba(200, 0, 70, 0.1) 100%)',
@@ -459,6 +547,16 @@ export default function StrategyDrilldown({
                 fontWeight: 700,
               }}
             />
+            <Typography
+              variant="caption"
+              sx={{
+                color: '#b0b0b0',
+                fontStyle: 'italic',
+                ml: 1,
+              }}
+            >
+              (Most strategies are long-only; some may use SELL for short entry)
+            </Typography>
           </Box>
         </Box>
 
@@ -474,6 +572,32 @@ export default function StrategyDrilldown({
         >
           <div ref={chartContainerRef} style={{ width: '100%', height: '500px' }} />
         </Box>
+
+        {/* Equity Curve Section */}
+        {strategy.equity_curve && strategy.equity_curve.length > 0 && (
+          <Box sx={{ mb: 3 }}>
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 700,
+                color: '#f5f5f5',
+                mb: 2,
+              }}
+            >
+              Equity Performance Curve
+            </Typography>
+            <Box
+              sx={{
+                background: 'rgba(30, 30, 30, 0.4)',
+                borderRadius: '12px',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                p: 2,
+              }}
+            >
+              <div ref={equityChartContainerRef} style={{ width: '100%', height: '250px' }} />
+            </Box>
+          </Box>
+        )}
 
         {/* Trade Signals List */}
         <Box>

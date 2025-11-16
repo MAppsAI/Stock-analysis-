@@ -4,24 +4,63 @@ from typing import Tuple, List
 
 
 def extract_signals(data: pd.DataFrame, position_col: str = 'Position') -> List[dict]:
-    """Helper function to extract buy/sell signals from position changes"""
+    """Helper function to extract buy/sell signals from position changes
+
+    Position = Signal.diff() captures transitions:
+    - Position = 1: 0→1 (enter long) OR -1→0 (exit short to neutral)
+    - Position = 2: -1→1 (exit short + enter long)
+    - Position = -1: 1→0 (exit long to neutral) OR 0→-1 (enter short)
+    - Position = -2: 1→-1 (exit long + enter short)
+
+    We need to look at both current Signal and Position to determine action type.
+    """
     signals = []
-    buy_signals = data[data[position_col] == 2.0]
-    sell_signals = data[data[position_col] == -2.0]
 
-    for idx, row in buy_signals.iterrows():
-        signals.append({
-            'date': idx.strftime('%Y-%m-%d'),
-            'price': float(row['Close']),
-            'type': 'buy'
-        })
+    # Get previous signal to understand the transition context
+    data['Prev_Signal'] = data['Signal'].shift(1).fillna(0)
 
-    for idx, row in sell_signals.iterrows():
-        signals.append({
-            'date': idx.strftime('%Y-%m-%d'),
-            'price': float(row['Close']),
-            'type': 'sell'
-        })
+    for idx, row in data.iterrows():
+        pos = row[position_col]
+        curr_signal = row['Signal']
+        prev_signal = row['Prev_Signal']
+
+        if pd.isna(pos) or pos == 0:
+            continue
+
+        # LONG ENTRIES: Transitions that result in Signal = 1
+        if pos == 1 and curr_signal == 1:  # 0→1: Enter long from neutral
+            signals.append({
+                'date': idx.strftime('%Y-%m-%d'),
+                'price': float(row['Close']),
+                'type': 'buy'
+            })
+        elif pos == 2:  # -1→1: Exit short + Enter long
+            signals.append({
+                'date': idx.strftime('%Y-%m-%d'),
+                'price': float(row['Close']),
+                'type': 'buy'
+            })
+        # SHORT ENTRIES / LONG EXITS: Transitions that result in Signal = -1 or 0
+        elif pos == -1 and curr_signal == -1:  # Either 1→-1 or 0→-1: Enter short
+            signals.append({
+                'date': idx.strftime('%Y-%m-%d'),
+                'price': float(row['Close']),
+                'type': 'sell'
+            })
+        elif pos == -1 and curr_signal == 0:  # 1→0: Exit long to neutral
+            signals.append({
+                'date': idx.strftime('%Y-%m-%d'),
+                'price': float(row['Close']),
+                'type': 'sell'
+            })
+        elif pos == -2:  # 1→-1: Exit long + Enter short
+            signals.append({
+                'date': idx.strftime('%Y-%m-%d'),
+                'price': float(row['Close']),
+                'type': 'sell'
+            })
+        # Note: pos == 1 with curr_signal == 0 (-1→0: exit short) is NOT included
+        # as it's not a traditional "buy" - it's just covering a short position
 
     signals.sort(key=lambda x: x['date'])
     return signals
@@ -577,7 +616,8 @@ def calculate_metrics(data: pd.DataFrame, signals: pd.Series) -> dict:
             'win_rate': 0.0,
             'max_drawdown': 0.0,
             'sharpe_ratio': 0.0,
-            'num_trades': 0
+            'num_trades': 0,
+            'equity_curve': []
         }
 
     total_return = (1 + strategy_returns).prod() - 1
@@ -590,12 +630,21 @@ def calculate_metrics(data: pd.DataFrame, signals: pd.Series) -> dict:
     sharpe_ratio = np.sqrt(252) * strategy_returns.mean() / strategy_returns.std() if strategy_returns.std() > 0 else 0
     num_trades = (signals.diff() != 0).sum()
 
+    # Build equity curve data points
+    equity_curve = []
+    for idx, value in cumulative_returns.items():
+        equity_curve.append({
+            'date': idx.strftime('%Y-%m-%d'),
+            'equity': float(value)
+        })
+
     return {
         'total_return': float(total_return * 100),
         'win_rate': float(win_rate * 100),
         'max_drawdown': float(max_drawdown * 100),
         'sharpe_ratio': float(sharpe_ratio),
-        'num_trades': int(num_trades)
+        'num_trades': int(num_trades),
+        'equity_curve': equity_curve
     }
 
 

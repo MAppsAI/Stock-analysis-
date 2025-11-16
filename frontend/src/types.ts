@@ -4,6 +4,11 @@ export interface TradeSignal {
   type: 'buy' | 'sell';
 }
 
+export interface EquityPoint {
+  date: string;
+  equity: number;  // Cumulative equity value (starts at 1.0 = 100%)
+}
+
 export interface StrategyResult {
   strategy: string;
   total_return: number;
@@ -12,6 +17,7 @@ export interface StrategyResult {
   sharpe_ratio: number;
   num_trades: number;
   signals: TradeSignal[];
+  equity_curve: EquityPoint[];
 }
 
 export interface PriceData {

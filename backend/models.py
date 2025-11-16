@@ -23,6 +23,11 @@ class TradeSignal(BaseModel):
     type: str  # "buy" or "sell"
 
 
+class EquityPoint(BaseModel):
+    date: str
+    equity: float  # Cumulative equity value (starts at 1.0 = 100%)
+
+
 class StrategyResult(BaseModel):
     strategy: str
     total_return: float
@@ -31,6 +36,7 @@ class StrategyResult(BaseModel):
     sharpe_ratio: float
     num_trades: int
     signals: List[TradeSignal]
+    equity_curve: List[EquityPoint]
 
 
 class BacktestResponse(BaseModel):
