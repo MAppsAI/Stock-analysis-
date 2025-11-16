@@ -54,14 +54,24 @@ async def run_backtest(request: BacktestRequest):
     Run backtest for selected strategies on a given ticker and date range
     """
     try:
-        # Download stock data
-        ticker = yf.Ticker(request.ticker)
-        data = ticker.history(start=request.startDate, end=request.endDate)
+        # Download stock data using yf.download (more reliable than Ticker.history)
+        data = yf.download(
+            request.ticker,
+            start=request.startDate,
+            end=request.endDate,
+            progress=False,
+            auto_adjust=False
+        )
+
+        # Handle multi-level columns from yf.download
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
 
         if data.empty:
             raise HTTPException(
                 status_code=404,
-                detail=f"No data found for ticker {request.ticker} in the specified date range"
+                detail=f"No data found for ticker {request.ticker} in the specified date range. "
+                       f"This could be due to: invalid ticker, no trading days in range, or Yahoo Finance access issues."
             )
 
         # Prepare price data for charting
@@ -114,8 +124,18 @@ async def run_backtest(request: BacktestRequest):
             price_data=price_data
         )
 
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = str(e)
+        # Check for common Yahoo Finance access issues
+        if "403" in error_msg or "Forbidden" in error_msg or "Access denied" in error_msg:
+            raise HTTPException(
+                status_code=503,
+                detail="Yahoo Finance access denied. This may be due to network restrictions, "
+                       "rate limiting, or firewall blocks. Please try again later or use a different network."
+            )
+        raise HTTPException(status_code=500, detail=f"Backtest error: {error_msg}")
 
 
 if __name__ == "__main__":
