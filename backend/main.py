@@ -5,9 +5,14 @@ import pandas as pd
 from datetime import datetime
 from typing import List
 
-from models import BacktestRequest, BacktestResponse, StrategyResult, TradeSignal, OptimizationRequest, OptimizationResponse
+from models import (
+    BacktestRequest, BacktestResponse, StrategyResult, TradeSignal,
+    OptimizationRequest, OptimizationResponse,
+    SaveHistoryRequest, SaveHistoryResponse, HistoryListResponse, HistoryDetail
+)
 from strategies import STRATEGY_MAP, calculate_metrics
 from optimizer import optimize_multiple_strategies, generate_optimization_summary
+from database import db
 
 app = FastAPI(title="Stock Analysis API", version="4.1.0")
 
@@ -218,6 +223,107 @@ async def optimize_strategies(request: OptimizationRequest):
                 detail="Yahoo Finance access denied. This may be due to network restrictions."
             )
         raise HTTPException(status_code=500, detail=f"Optimization error: {error_msg}")
+
+
+# History Management Endpoints
+
+@app.post("/api/v1/history", response_model=SaveHistoryResponse)
+async def save_history(request: SaveHistoryRequest):
+    """
+    Save a backtest or optimization result to history
+    """
+    try:
+        if request.run_type == "backtest":
+            history_id = db.save_backtest(
+                ticker=request.ticker,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                results_data=request.results_data,
+                title=request.title
+            )
+        elif request.run_type == "optimization":
+            history_id = db.save_optimization(
+                ticker=request.ticker,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                results_data=request.results_data,
+                title=request.title
+            )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid run_type: {request.run_type}. Must be 'backtest' or 'optimization'"
+            )
+
+        return SaveHistoryResponse(
+            id=history_id,
+            message=f"{request.run_type.capitalize()} saved successfully"
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error saving history: {str(e)}")
+
+
+@app.get("/api/v1/history", response_model=HistoryListResponse)
+async def get_history(ticker: str = None, limit: int = 100, offset: int = 0):
+    """
+    Get all history entries, optionally filtered by ticker search
+    """
+    try:
+        items = db.get_all_history(ticker_filter=ticker, limit=limit, offset=offset)
+        total_count = db.get_history_count(ticker_filter=ticker)
+
+        return HistoryListResponse(
+            total_count=total_count,
+            items=items
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving history: {str(e)}")
+
+
+@app.get("/api/v1/history/{history_id}", response_model=HistoryDetail)
+async def get_history_by_id(history_id: int):
+    """
+    Get a specific history entry by ID, including full results data
+    """
+    try:
+        history = db.get_history_by_id(history_id)
+
+        if history is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"History entry with ID {history_id} not found"
+            )
+
+        return history
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving history: {str(e)}")
+
+
+@app.delete("/api/v1/history/{history_id}")
+async def delete_history(history_id: int):
+    """
+    Delete a history entry by ID
+    """
+    try:
+        deleted = db.delete_history(history_id)
+
+        if not deleted:
+            raise HTTPException(
+                status_code=404,
+                detail=f"History entry with ID {history_id} not found"
+            )
+
+        return {"message": f"History entry {history_id} deleted successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting history: {str(e)}")
 
 
 if __name__ == "__main__":
