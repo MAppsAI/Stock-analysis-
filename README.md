@@ -42,7 +42,7 @@ python server.py
 
 **Features:**
 - 🔧 10 MCP tools wrapping all backend APIs
-- 📊 LLM-friendly formatted output (summaries + full JSON)
+- 📊 LLM-friendly compact summaries (key metrics only, no large data dumps)
 - 🐳 Docker support for easy deployment
 - 💾 Save and retrieve analysis history
 - 📈 203+ strategies + 9 portfolio strategies
