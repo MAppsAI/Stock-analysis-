@@ -43,3 +43,30 @@ export interface Strategy {
   name: string;
   category: string;
 }
+
+export interface OptimizationRequest {
+  ticker: string;
+  startDate: string;
+  endDate: string;
+  strategies: string[];
+}
+
+export interface OptimizationResult {
+  strategy_type: string;
+  status: string;
+  best_params?: Record<string, any>;
+  best_score?: number;
+  best_metrics?: Record<string, any>;
+  total_tested?: number;
+  all_results?: Array<Record<string, any>>;
+  param_ranges?: Record<string, any[]>;
+  message?: string;
+}
+
+export interface OptimizationResponse {
+  ticker: string;
+  startDate: string;
+  endDate: string;
+  optimization_results: Record<string, OptimizationResult>;
+  summary: Record<string, any>;
+}

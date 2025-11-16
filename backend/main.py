@@ -5,10 +5,11 @@ import pandas as pd
 from datetime import datetime
 from typing import List
 
-from models import BacktestRequest, BacktestResponse, StrategyResult, TradeSignal
+from models import BacktestRequest, BacktestResponse, StrategyResult, TradeSignal, OptimizationRequest, OptimizationResponse
 from strategies import STRATEGY_MAP, calculate_metrics
+from optimizer import optimize_multiple_strategies, generate_optimization_summary
 
-app = FastAPI(title="Stock Analysis API", version="3.0.0")
+app = FastAPI(title="Stock Analysis API", version="3.5.0")
 
 # Configure CORS
 app.add_middleware(
@@ -23,13 +24,15 @@ app.add_middleware(
 @app.get("/")
 def read_root():
     return {
-        "message": "Stock Analysis API v3.0 - 35 Strategies",
+        "message": "Stock Analysis API v3.5 - 35 Strategies with Hyperparameter Optimization",
         "status": "running",
         "total_strategies": len(STRATEGY_MAP),
         "categories": len(set(s['category'] for s in STRATEGY_MAP.values())),
+        "features": ["Backtesting", "Parameter Optimization", "Parallel Processing"],
         "endpoints": {
             "/api/v1/backtest": "POST - Run backtest for selected strategies",
-            "/api/v1/strategies": "GET - List available strategies"
+            "/api/v1/strategies": "GET - List available strategies",
+            "/api/v1/optimize": "POST - Optimize strategy parameters"
         }
     }
 
@@ -137,6 +140,61 @@ async def run_backtest(request: BacktestRequest):
                        "rate limiting, or firewall blocks. Please try again later or use a different network."
             )
         raise HTTPException(status_code=500, detail=f"Backtest error: {error_msg}")
+
+
+@app.post("/api/v1/optimize", response_model=OptimizationResponse)
+async def optimize_strategies(request: OptimizationRequest):
+    """
+    Optimize strategy parameters for selected strategies in parallel
+    """
+    try:
+        # Download stock data
+        data = yf.download(
+            request.ticker,
+            start=request.startDate,
+            end=request.endDate,
+            progress=False,
+            auto_adjust=False
+        )
+
+        # Handle multi-level columns
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
+
+        if data.empty:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No data found for ticker {request.ticker} in the specified date range."
+            )
+
+        # Run parallel optimization
+        optimization_results = optimize_multiple_strategies(
+            strategies=request.strategies,
+            data=data,
+            max_workers=4
+        )
+
+        # Generate summary
+        summary = generate_optimization_summary(optimization_results)
+
+        return OptimizationResponse(
+            ticker=request.ticker,
+            startDate=request.startDate,
+            endDate=request.endDate,
+            optimization_results=optimization_results,
+            summary=summary
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = str(e)
+        if "403" in error_msg or "Forbidden" in error_msg or "Access denied" in error_msg:
+            raise HTTPException(
+                status_code=503,
+                detail="Yahoo Finance access denied. This may be due to network restrictions."
+            )
+        raise HTTPException(status_code=500, detail=f"Optimization error: {error_msg}")
 
 
 if __name__ == "__main__":

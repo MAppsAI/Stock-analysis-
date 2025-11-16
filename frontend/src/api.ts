@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { BacktestRequest, BacktestResponse, Strategy } from './types';
+import { BacktestRequest, BacktestResponse, Strategy, OptimizationRequest, OptimizationResponse } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -11,6 +11,11 @@ export const api = {
 
   async runBacktest(request: BacktestRequest): Promise<BacktestResponse> {
     const response = await axios.post(`${API_BASE_URL}/api/v1/backtest`, request);
+    return response.data;
+  },
+
+  async runOptimization(request: OptimizationRequest): Promise<OptimizationResponse> {
+    const response = await axios.post(`${API_BASE_URL}/api/v1/optimize`, request);
     return response.data;
   },
 };
