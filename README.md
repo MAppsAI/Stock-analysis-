@@ -24,6 +24,19 @@ npm run dev
 
 Then open `http://localhost:3000` in your browser.
 
+## 🧪 Testing
+
+**[See TESTING.md for complete testing guide](./TESTING.md)**
+
+Quick verification of all 25 strategies:
+
+```bash
+cd backend
+python test_spy_synthetic.py
+```
+
+This runs a comprehensive 10-year backtest on synthetic SPY data and verifies all strategies work correctly. Integration tests and API endpoint verification are also available - see TESTING.md for details.
+
 ## ✅ Implementation Status
 
 **v1.0 (The Core Pipeline) - COMPLETED** ✓
