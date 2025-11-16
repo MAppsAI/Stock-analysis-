@@ -249,6 +249,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ onLoadHistory, onRefresh })
                             />
                           </Box>
                         }
+                        primaryTypographyProps={{ component: 'div' }}
                         secondary={
                           <Box sx={{ mt: 0.5 }}>
                             <Typography variant="caption" color="text.secondary" display="block">
@@ -279,6 +280,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ onLoadHistory, onRefresh })
                             )}
                           </Box>
                         }
+                        secondaryTypographyProps={{ component: 'div' }}
                       />
                     </ListItemButton>
                   </ListItem>
