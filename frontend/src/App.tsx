@@ -124,7 +124,7 @@ function App() {
                 maxWidth: '800px',
               }}
             >
-              Test 35+ strategies with advanced visualization, analytics, and hyperparameter optimization
+              Test 200+ strategies with advanced visualization, analytics, and hyperparameter optimization
             </Typography>
           </Box>
         </Paper>
@@ -176,7 +176,9 @@ function App() {
                 mt: 1,
               }}
             >
-              Analyzing market data and computing metrics
+              {activeTab === 1
+                ? 'Testing parameter combinations across strategies... This may take a few minutes.'
+                : 'Analyzing market data and computing metrics'}
             </Typography>
           </Paper>
         )}
@@ -241,13 +243,13 @@ function App() {
         )}
 
         {/* Strategy drilldown modal */}
-        {selectedStrategy && backtestData && (
+        {selectedStrategy && (backtestData || optimizationData) && (
           <StrategyDrilldown
             open={!!selectedStrategy}
             onClose={handleCloseModal}
             strategy={selectedStrategy}
-            priceData={backtestData.price_data}
-            ticker={backtestData.ticker}
+            priceData={backtestData?.price_data || optimizationData?.price_data || []}
+            ticker={backtestData?.ticker || optimizationData?.ticker || ''}
           />
         )}
       </Box>

@@ -211,7 +211,7 @@ export default function OptimizationPanel({ optimizationData }: OptimizationPane
                       <Box>
                         {Object.entries(result.best_params).map(([key, value]) => (
                           <Typography key={key} variant="body2">
-                            {key}: <strong>{value}</strong>
+                            {key}: <strong>{typeof value === 'object' && value !== null ? JSON.stringify(value) : value}</strong>
                           </Typography>
                         ))}
                       </Box>

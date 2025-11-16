@@ -69,4 +69,5 @@ export interface OptimizationResponse {
   endDate: string;
   optimization_results: Record<string, OptimizationResult>;
   summary: Record<string, any>;
+  price_data: PriceData[];
 }
