@@ -13,6 +13,17 @@ interface SummaryCardsProps {
 }
 
 export default function SummaryCards({ results, ticker }: SummaryCardsProps) {
+  // Return early if no results
+  if (!results || results.length === 0) {
+    return (
+      <Paper sx={{ p: 3, mt: 3 }}>
+        <Typography variant="h6" color="text.secondary">
+          No results available
+        </Typography>
+      </Paper>
+    );
+  }
+
   // Calculate summary statistics
   const bestStrategy = results.reduce((best, current) =>
     current.total_return > best.total_return ? current : best

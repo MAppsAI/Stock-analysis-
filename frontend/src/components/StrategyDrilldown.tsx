@@ -400,7 +400,7 @@ export default function StrategyDrilldown({
             mb: 3,
           }}
         >
-          <div ref={chartContainerRef} style={{ width: '100%' }} />
+          <div ref={chartContainerRef} style={{ width: '100%', height: '500px' }} />
         </Box>
 
         {/* Trade Signals List */}
