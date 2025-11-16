@@ -4,10 +4,17 @@ from typing import Tuple, List
 
 
 def extract_signals(data: pd.DataFrame, position_col: str = 'Position') -> List[dict]:
-    """Helper function to extract buy/sell signals from position changes"""
+    """Helper function to extract buy/sell signals from position changes
+
+    Position values from Signal.diff():
+    - Position > 0: Long entry (1.0 = initial entry from 0->1, 2.0 = re-entry from -1->1)
+    - Position < 0: Short/Exit (−1.0 = initial from 0->-1, -2.0 = switch from 1->-1)
+    """
     signals = []
-    buy_signals = data[data[position_col] == 2.0]
-    sell_signals = data[data[position_col] == -2.0]
+    # Capture ALL long entries: both initial (1.0) and re-entries (2.0)
+    buy_signals = data[data[position_col] > 0]
+    # Capture ALL short/exit signals: both initial (-1.0) and switches (-2.0)
+    sell_signals = data[data[position_col] < 0]
 
     for idx, row in buy_signals.iterrows():
         signals.append({
@@ -577,7 +584,8 @@ def calculate_metrics(data: pd.DataFrame, signals: pd.Series) -> dict:
             'win_rate': 0.0,
             'max_drawdown': 0.0,
             'sharpe_ratio': 0.0,
-            'num_trades': 0
+            'num_trades': 0,
+            'equity_curve': []
         }
 
     total_return = (1 + strategy_returns).prod() - 1
@@ -590,12 +598,21 @@ def calculate_metrics(data: pd.DataFrame, signals: pd.Series) -> dict:
     sharpe_ratio = np.sqrt(252) * strategy_returns.mean() / strategy_returns.std() if strategy_returns.std() > 0 else 0
     num_trades = (signals.diff() != 0).sum()
 
+    # Build equity curve data points
+    equity_curve = []
+    for idx, value in cumulative_returns.items():
+        equity_curve.append({
+            'date': idx.strftime('%Y-%m-%d'),
+            'equity': float(value)
+        })
+
     return {
         'total_return': float(total_return * 100),
         'win_rate': float(win_rate * 100),
         'max_drawdown': float(max_drawdown * 100),
         'sharpe_ratio': float(sharpe_ratio),
-        'num_trades': int(num_trades)
+        'num_trades': int(num_trades),
+        'equity_curve': equity_curve
     }
 
 
