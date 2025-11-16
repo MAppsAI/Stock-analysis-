@@ -1,8 +1,45 @@
 # Stock-analysis-
 100 ways to analyze a stock
 
-Project: The Strategy Matrix
+## Project: The Strategy Matrix
 An interactive analysis platform for discovering the "strategy-to-stock fit" in real-time.
+
+## 🚀 Quick Start
+
+**[See SETUP.md for detailed installation and usage instructions](./SETUP.md)**
+
+```bash
+# Backend (Terminal 1)
+cd backend
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+python main.py
+
+# Frontend (Terminal 2)
+cd frontend
+npm install
+npm run dev
+```
+
+Then open `http://localhost:3000` in your browser.
+
+## ✅ Implementation Status
+
+**v1.0 (The Core Pipeline) - COMPLETED** ✓
+- ✓ FastAPI backend with SMA 50/200 Cross strategy
+- ✓ React frontend with TypeScript and Vite
+- ✓ End-to-end flow: Ticker → API → Backtest → JSON → Display
+- ✓ Interactive ResultsTable with sorting
+- ✓ StrategyDrilldown modal with candlestick chart and buy/sell signals
+- ✓ Performance metrics: Total Return, Win Rate, Max Drawdown, Sharpe Ratio, # of Trades
+
+**Next: v2.0 (The MVP Dashboard)** - Planned
+- Expand Strategy Library to 25 core strategies
+- Enhanced filtering and strategy categories
+- Additional UI improvements
+
+---
 1. The Vision
 The internet is flooded with trading strategies. The problem is, a strategy that works for a stable utility stock will fail miserably on a volatile tech stock.
 This application is the solution.
