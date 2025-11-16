@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Container, Box, Typography, Paper, Tabs, Tab, CircularProgress } from '@mui/material';
 import { Insights } from '@mui/icons-material';
 import ControlPanel from './components/ControlPanel';
@@ -7,7 +7,9 @@ import VisualizationPanel from './components/VisualizationPanel';
 import ResultsTable from './components/ResultsTable';
 import StrategyDrilldown from './components/StrategyDrilldown';
 import OptimizationPanel from './components/OptimizationPanel';
+import HistoryPanel from './components/HistoryPanel';
 import { BacktestResponse, StrategyResult, OptimizationResponse } from './types';
+import { api } from './api';
 
 function App() {
   const [backtestData, setBacktestData] = useState<BacktestResponse | null>(null);
@@ -15,17 +17,58 @@ function App() {
   const [selectedStrategy, setSelectedStrategy] = useState<StrategyResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
-  const handleBacktestComplete = (data: BacktestResponse) => {
+  const handleBacktestComplete = async (data: BacktestResponse) => {
     setBacktestData(data);
     setOptimizationData(null);
     setActiveTab(0);
+
+    // Auto-save to history
+    try {
+      await api.saveHistory({
+        ticker: data.ticker,
+        start_date: data.startDate,
+        end_date: data.endDate,
+        run_type: 'backtest',
+        results_data: data,
+      });
+      setHistoryRefreshKey((prev) => prev + 1);
+    } catch (error) {
+      console.error('Failed to save backtest to history:', error);
+    }
   };
 
-  const handleOptimizationComplete = (data: OptimizationResponse) => {
+  const handleOptimizationComplete = async (data: OptimizationResponse) => {
     setOptimizationData(data);
     setBacktestData(null);
     setActiveTab(1);
+
+    // Auto-save to history
+    try {
+      await api.saveHistory({
+        ticker: data.ticker,
+        start_date: data.startDate,
+        end_date: data.endDate,
+        run_type: 'optimization',
+        results_data: data,
+      });
+      setHistoryRefreshKey((prev) => prev + 1);
+    } catch (error) {
+      console.error('Failed to save optimization to history:', error);
+    }
+  };
+
+  const handleLoadFromHistory = (data: BacktestResponse | OptimizationResponse, runType: 'backtest' | 'optimization') => {
+    if (runType === 'backtest') {
+      setBacktestData(data as BacktestResponse);
+      setOptimizationData(null);
+      setActiveTab(0);
+    } else {
+      setOptimizationData(data as OptimizationResponse);
+      setBacktestData(null);
+      setActiveTab(1);
+    }
   };
 
   const handleStrategyClick = (strategy: StrategyResult) => {
@@ -37,8 +80,17 @@ function App() {
   };
 
   return (
-    <Container maxWidth="xl">
-      <Box sx={{ my: 4 }}>
+    <Box sx={{ display: 'flex' }}>
+      {/* History sidebar */}
+      <HistoryPanel
+        key={historyRefreshKey}
+        onLoadHistory={handleLoadFromHistory}
+        onRefresh={() => setHistoryRefreshKey((prev) => prev + 1)}
+      />
+
+      {/* Main content */}
+      <Container maxWidth="xl" sx={{ flexGrow: 1 }}>
+        <Box sx={{ my: 4 }}>
         {/* Elegant header with glassmorphism */}
         <Paper
           elevation={0}
@@ -252,8 +304,9 @@ function App() {
             ticker={backtestData?.ticker || optimizationData?.ticker || ''}
           />
         )}
-      </Box>
-    </Container>
+        </Box>
+      </Container>
+    </Box>
   );
 }
 

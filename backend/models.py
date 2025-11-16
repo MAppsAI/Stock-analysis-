@@ -60,3 +60,50 @@ class OptimizationResponse(BaseModel):
     optimization_results: Dict[str, Any]
     summary: Dict[str, Any]
     price_data: List[dict]  # OHLC data for charting (same as BacktestResponse)
+
+
+class HistorySummary(BaseModel):
+    """Summary information for a history entry (list view)."""
+    id: int
+    ticker: str
+    start_date: str
+    end_date: str
+    run_type: str  # "backtest" or "optimization"
+    created_at: str
+    title: str
+    summary_metrics: Optional[Dict[str, Any]] = None
+
+
+class HistoryDetail(BaseModel):
+    """Complete history entry with full results data."""
+    id: int
+    ticker: str
+    start_date: str
+    end_date: str
+    run_type: str
+    created_at: str
+    title: str
+    summary_metrics: Optional[Dict[str, Any]] = None
+    results_data: Dict[str, Any]
+
+
+class SaveHistoryRequest(BaseModel):
+    """Request to save a history entry."""
+    ticker: str
+    start_date: str
+    end_date: str
+    run_type: str  # "backtest" or "optimization"
+    results_data: Dict[str, Any]
+    title: Optional[str] = None
+
+
+class SaveHistoryResponse(BaseModel):
+    """Response after saving a history entry."""
+    id: int
+    message: str
+
+
+class HistoryListResponse(BaseModel):
+    """Response for listing history entries."""
+    total_count: int
+    items: List[HistorySummary]

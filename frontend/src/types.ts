@@ -71,3 +71,45 @@ export interface OptimizationResponse {
   summary: Record<string, any>;
   price_data: PriceData[];
 }
+
+export interface HistorySummary {
+  id: number;
+  ticker: string;
+  start_date: string;
+  end_date: string;
+  run_type: 'backtest' | 'optimization';
+  created_at: string;
+  title: string;
+  summary_metrics?: Record<string, any>;
+}
+
+export interface HistoryDetail {
+  id: number;
+  ticker: string;
+  start_date: string;
+  end_date: string;
+  run_type: 'backtest' | 'optimization';
+  created_at: string;
+  title: string;
+  summary_metrics?: Record<string, any>;
+  results_data: BacktestResponse | OptimizationResponse;
+}
+
+export interface SaveHistoryRequest {
+  ticker: string;
+  start_date: string;
+  end_date: string;
+  run_type: 'backtest' | 'optimization';
+  results_data: BacktestResponse | OptimizationResponse;
+  title?: string;
+}
+
+export interface SaveHistoryResponse {
+  id: number;
+  message: string;
+}
+
+export interface HistoryListResponse {
+  total_count: number;
+  items: HistorySummary[];
+}
