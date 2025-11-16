@@ -10,6 +10,9 @@ import OptimizationPanel from './components/OptimizationPanel';
 import HistoryPanel from './components/HistoryPanel';
 import PortfolioControlPanel from './components/PortfolioControlPanel';
 import PortfolioMetricsTable from './components/PortfolioMetricsTable';
+import CorrelationHeatmap from './components/CorrelationHeatmap';
+import AssetAllocationChart from './components/AssetAllocationChart';
+import EfficientFrontier from './components/EfficientFrontier';
 import { BacktestResponse, StrategyResult, OptimizationResponse, PortfolioBacktestResponse } from './types';
 import { api } from './api';
 
@@ -355,12 +358,41 @@ function App() {
 
             {mode === 'portfolio' && portfolioData && (
               <Box>
+                {/* Efficient Frontier */}
                 <Box sx={{ animation: 'fadeInUp 0.6s ease-out 0.1s backwards' }}>
+                  <EfficientFrontier
+                    results={portfolioData.results}
+                    buyHoldResult={portfolioData.buy_hold_result}
+                  />
+                </Box>
+
+                {/* Portfolio Metrics Table */}
+                <Box sx={{ animation: 'fadeInUp 0.6s ease-out 0.2s backwards' }}>
                   <PortfolioMetricsTable
                     results={portfolioData.results}
                     buyHoldResult={portfolioData.buy_hold_result}
                   />
                 </Box>
+
+                {/* Asset Allocation Over Time */}
+                {portfolioData.results.length > 0 && portfolioData.results[0].weights_timeline && (
+                  <Box sx={{ animation: 'fadeInUp 0.6s ease-out 0.3s backwards' }}>
+                    <AssetAllocationChart
+                      weightsTimeline={portfolioData.results[0].weights_timeline}
+                      tickers={portfolioData.tickers}
+                    />
+                  </Box>
+                )}
+
+                {/* Correlation Heatmap */}
+                {portfolioData.results.length > 0 && portfolioData.results[0].portfolio_metrics.correlation_matrix && (
+                  <Box sx={{ animation: 'fadeInUp 0.6s ease-out 0.4s backwards' }}>
+                    <CorrelationHeatmap
+                      correlationMatrix={portfolioData.results[0].portfolio_metrics.correlation_matrix}
+                      tickers={portfolioData.tickers}
+                    />
+                  </Box>
+                )}
               </Box>
             )}
           </Box>

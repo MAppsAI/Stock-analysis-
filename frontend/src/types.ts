@@ -166,6 +166,9 @@ export interface PortfolioMetrics {
   diversification_ratio: number;
   correlation_matrix: Record<string, Record<string, number>>;
   rebalance_dates: string[];
+  total_transaction_costs?: number;
+  transaction_cost_impact_pct?: number;
+  estimated_tax_drag_pct?: number;
 }
 
 export interface PortfolioStrategyResult {

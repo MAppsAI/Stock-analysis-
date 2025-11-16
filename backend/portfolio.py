@@ -26,9 +26,11 @@ class PortfolioEngine:
         asset_data: Dict[str, pd.DataFrame],
         allocation_method: Literal['equal', 'market_cap', 'optimized', 'custom'] = 'equal',
         custom_weights: Optional[Dict[str, float]] = None,
-        rebalancing: Literal['none', 'monthly', 'quarterly', 'threshold'] = 'none',
+        rebalancing: Literal['none', 'monthly', 'quarterly', 'threshold', 'tax_aware'] = 'none',
         rebalance_threshold: float = 0.05,  # 5% drift triggers rebalance
         transaction_cost: float = 0.001,  # 0.1% per trade
+        tax_rate: float = 0.15,  # 15% capital gains tax (for tax-aware rebalancing)
+        min_rebalance_amount: float = 0.02,  # Minimum 2% change to avoid excessive trading
     ):
         """
         Initialize portfolio engine
@@ -41,6 +43,8 @@ class PortfolioEngine:
             rebalancing: Rebalancing frequency
             rebalance_threshold: Weight drift % that triggers rebalance
             transaction_cost: Transaction cost as fraction (0.001 = 0.1%)
+            tax_rate: Capital gains tax rate (for tax-aware rebalancing)
+            min_rebalance_amount: Minimum weight change to execute trade
         """
         self.tickers = tickers
         self.asset_data = asset_data
@@ -49,6 +53,8 @@ class PortfolioEngine:
         self.rebalancing = rebalancing
         self.rebalance_threshold = rebalance_threshold
         self.transaction_cost = transaction_cost
+        self.tax_rate = tax_rate
+        self.min_rebalance_amount = min_rebalance_amount
 
         # Align all asset data to common date index
         self._align_data()
@@ -133,7 +139,8 @@ class PortfolioEngine:
         self,
         current_date: datetime,
         last_rebalance: datetime,
-        current_weights: Dict[str, float]
+        current_weights: Dict[str, float],
+        asset_gains: Optional[Dict[str, float]] = None
     ) -> bool:
         """Determine if portfolio should be rebalanced"""
         if self.rebalancing == 'none':
@@ -158,6 +165,36 @@ class PortfolioEngine:
                 if drift > self.rebalance_threshold:
                     return True
             return False
+
+        elif self.rebalancing == 'tax_aware':
+            # Tax-aware rebalancing: only rebalance if benefit > tax cost
+            if asset_gains is None:
+                # Fallback to threshold-based if no gains data
+                return self.should_rebalance(current_date, last_rebalance, current_weights)
+
+            total_benefit = 0.0
+            total_tax_cost = 0.0
+
+            for ticker in self.tickers:
+                target_weight = self.initial_weights[ticker]
+                current_weight = current_weights[ticker]
+                drift = abs(current_weight - target_weight)
+
+                # Only consider if drift exceeds minimum threshold
+                if drift > self.min_rebalance_amount:
+                    # Benefit of rebalancing (reduced risk/improved allocation)
+                    total_benefit += drift
+
+                    # Tax cost if selling winners (capital gains > 0)
+                    if current_weight > target_weight:  # Need to sell
+                        gain = asset_gains.get(ticker, 0)
+                        if gain > 0:
+                            sell_amount = current_weight - target_weight
+                            tax_cost = sell_amount * gain * self.tax_rate
+                            total_tax_cost += tax_cost
+
+            # Rebalance only if net benefit exceeds tax cost
+            return total_benefit > (total_tax_cost + self.transaction_cost * 2)
 
         return False
 
@@ -202,6 +239,16 @@ class PortfolioEngine:
         # Portfolio turnover
         turnover = self._calculate_turnover(weights_timeline, rebalance_dates)
 
+        # Transaction cost impact
+        total_transaction_costs = turnover * len(rebalance_dates) * self.transaction_cost
+        transaction_cost_impact = total_transaction_costs / (1 + total_return) if total_return != -1 else 0
+
+        # Estimated tax impact (simplified: assumes average gain)
+        estimated_tax_drag = 0.0
+        if self.rebalancing == 'tax_aware' and len(rebalance_dates) > 0:
+            # Simplified: estimate tax as % of total return
+            estimated_tax_drag = total_return * 0.15 * (len(rebalance_dates) / 12)  # Pro-rated
+
         return {
             'total_return': float(total_return),
             'annualized_return': float(annualized_return),
@@ -213,7 +260,10 @@ class PortfolioEngine:
             'turnover': float(turnover),
             'diversification_ratio': float(diversification_ratio),
             'correlation_matrix': correlation_matrix,
-            'rebalance_dates': rebalance_dates
+            'rebalance_dates': rebalance_dates,
+            'total_transaction_costs': float(total_transaction_costs),
+            'transaction_cost_impact_pct': float(transaction_cost_impact * 100),
+            'estimated_tax_drag_pct': float(estimated_tax_drag * 100)
         }
 
     def _calculate_turnover(

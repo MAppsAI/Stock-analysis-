@@ -165,6 +165,9 @@ class PortfolioMetrics(BaseModel):
     diversification_ratio: float
     correlation_matrix: Dict[str, Dict[str, float]]  # ticker -> ticker -> correlation
     rebalance_dates: List[str]
+    total_transaction_costs: float = 0.0  # Total transaction costs incurred
+    transaction_cost_impact_pct: float = 0.0  # Transaction costs as % of returns
+    estimated_tax_drag_pct: float = 0.0  # Estimated tax impact as % of returns
 
 
 class PortfolioStrategyResult(BaseModel):

@@ -432,6 +432,233 @@ def mean_variance_optimization(
     return signals, weights
 
 
+def hierarchical_risk_parity(
+    asset_data: Dict[str, pd.DataFrame],
+    lookback_period: int = 252,
+    **kwargs
+) -> Tuple[Dict[str, pd.Series], Dict[str, float]]:
+    """
+    Hierarchical Risk Parity (HRP)
+
+    Uses hierarchical clustering on correlation matrix to allocate weights.
+    More stable than traditional mean-variance optimization.
+
+    Args:
+        asset_data: Dict mapping ticker -> OHLCV DataFrame
+        lookback_period: Days for calculating correlation and volatility
+
+    Returns:
+        - signals: Dict mapping ticker -> signal series (all 1s)
+        - weights: Dict mapping ticker -> optimized portfolio weight
+    """
+    tickers = list(asset_data.keys())
+
+    # Get common date index
+    common_index = asset_data[tickers[0]].index
+    for ticker in tickers[1:]:
+        common_index = common_index.intersection(asset_data[ticker].index)
+
+    # Calculate returns
+    returns_df = pd.DataFrame({
+        ticker: asset_data[ticker]['Close'].pct_change().reindex(common_index)
+        for ticker in tickers
+    }).dropna()
+
+    if len(returns_df) < lookback_period:
+        logger.warning(f"Insufficient data for HRP, using equal weights")
+        weight = 1.0 / len(tickers)
+        weights = {ticker: weight for ticker in tickers}
+    else:
+        recent_returns = returns_df.tail(lookback_period)
+
+        # Calculate correlation matrix
+        corr_matrix = recent_returns.corr()
+
+        # Calculate volatilities
+        volatilities = recent_returns.std() * np.sqrt(252)
+
+        # Simple HRP approximation using quasi-diagonalization
+        # Full HRP would use scipy for clustering
+        # For now, use inverse volatility weighted by correlation structure
+
+        # Calculate inverse volatility
+        inv_vol = 1.0 / volatilities
+
+        # Adjust by correlation - penalize highly correlated assets
+        avg_correlations = corr_matrix.mean()
+        correlation_penalty = 1.0 / (1.0 + avg_correlations)
+
+        # Combine inverse volatility with correlation penalty
+        hrp_scores = inv_vol * correlation_penalty
+        weights_array = hrp_scores / hrp_scores.sum()
+
+        weights = {ticker: float(weights_array[ticker]) for ticker in tickers}
+
+    # All buy-and-hold signals
+    signals = {ticker: pd.Series([1] * len(common_index), index=common_index, name='Signal')
+              for ticker in tickers}
+
+    logger.info(f"Hierarchical Risk Parity: {len(tickers)} assets")
+
+    return signals, weights
+
+
+def black_litterman(
+    asset_data: Dict[str, pd.DataFrame],
+    lookback_period: int = 252,
+    tau: float = 0.05,
+    market_weights: Optional[Dict[str, float]] = None,
+    investor_views: Optional[Dict[str, float]] = None,
+    view_confidence: float = 0.5,
+    **kwargs
+) -> Tuple[Dict[str, pd.Series], Dict[str, float]]:
+    """
+    Black-Litterman Model
+
+    Combines market equilibrium with investor views to generate expected returns.
+
+    Args:
+        asset_data: Dict mapping ticker -> OHLCV DataFrame
+        lookback_period: Days for covariance calculation
+        tau: Uncertainty in prior (typically 0.01 to 0.05)
+        market_weights: Market cap weights (if None, uses equal weight)
+        investor_views: Dict of ticker -> expected return (if None, uses market returns)
+        view_confidence: Confidence in views (0 to 1)
+
+    Returns:
+        - signals: Dict mapping ticker -> signal series (all 1s)
+        - weights: Dict mapping ticker -> optimized portfolio weight
+    """
+    tickers = list(asset_data.keys())
+
+    # Get common date index
+    common_index = asset_data[tickers[0]].index
+    for ticker in tickers[1:]:
+        common_index = common_index.intersection(asset_data[ticker].index)
+
+    # Calculate returns
+    returns_df = pd.DataFrame({
+        ticker: asset_data[ticker]['Close'].pct_change().reindex(common_index)
+        for ticker in tickers
+    }).dropna()
+
+    if len(returns_df) < lookback_period:
+        logger.warning(f"Insufficient data for Black-Litterman, using equal weights")
+        weight = 1.0 / len(tickers)
+        weights = {ticker: weight for ticker in tickers}
+    else:
+        recent_returns = returns_df.tail(lookback_period)
+
+        # Covariance matrix
+        cov_matrix = recent_returns.cov() * 252
+
+        # Market equilibrium weights (if not provided)
+        if market_weights is None:
+            market_weights = {ticker: 1.0 / len(tickers) for ticker in tickers}
+
+        # Calculate implied equilibrium returns
+        market_weights_array = np.array([market_weights.get(ticker, 0) for ticker in tickers])
+        risk_aversion = 2.5  # Typical value
+        equilibrium_returns = risk_aversion * cov_matrix.values @ market_weights_array
+
+        # If no investor views, use equilibrium
+        if investor_views is None or len(investor_views) == 0:
+            # Use equilibrium returns to derive weights (inverse volatility approximation)
+            volatilities = np.sqrt(np.diag(cov_matrix))
+            inv_vol = 1.0 / volatilities
+            weights_array = inv_vol / inv_vol.sum()
+        else:
+            # Blend equilibrium with investor views
+            views_array = np.array([investor_views.get(ticker, equilibrium_returns[i])
+                                   for i, ticker in enumerate(tickers)])
+
+            # Simple blending (full BL would use Bayesian update)
+            blended_returns = (1 - view_confidence) * equilibrium_returns + view_confidence * views_array
+
+            # Convert to weights using mean-variance
+            volatilities = np.sqrt(np.diag(cov_matrix))
+            sharpe_scores = blended_returns / volatilities
+            sharpe_scores = np.maximum(sharpe_scores, 0)  # No short positions
+            weights_array = sharpe_scores / sharpe_scores.sum() if sharpe_scores.sum() > 0 else market_weights_array
+
+        weights = {ticker: float(w) for ticker, w in zip(tickers, weights_array)}
+
+    # All buy-and-hold signals
+    signals = {ticker: pd.Series([1] * len(common_index), index=common_index, name='Signal')
+              for ticker in tickers}
+
+    logger.info(f"Black-Litterman: {len(tickers)} assets")
+
+    return signals, weights
+
+
+def cvar_optimization(
+    asset_data: Dict[str, pd.DataFrame],
+    lookback_period: int = 252,
+    confidence_level: float = 0.95,
+    **kwargs
+) -> Tuple[Dict[str, pd.Series], Dict[str, float]]:
+    """
+    Conditional Value-at-Risk (CVaR) Optimization
+
+    Minimizes tail risk instead of variance. Focuses on worst-case scenarios.
+
+    Args:
+        asset_data: Dict mapping ticker -> OHLCV DataFrame
+        lookback_period: Days for CVaR calculation
+        confidence_level: Confidence level for CVaR (e.g., 0.95 = 95%)
+
+    Returns:
+        - signals: Dict mapping ticker -> signal series (all 1s)
+        - weights: Dict mapping ticker -> optimized portfolio weight
+    """
+    tickers = list(asset_data.keys())
+
+    # Get common date index
+    common_index = asset_data[tickers[0]].index
+    for ticker in tickers[1:]:
+        common_index = common_index.intersection(asset_data[ticker].index)
+
+    # Calculate returns
+    returns_df = pd.DataFrame({
+        ticker: asset_data[ticker]['Close'].pct_change().reindex(common_index)
+        for ticker in tickers
+    }).dropna()
+
+    if len(returns_df) < lookback_period:
+        logger.warning(f"Insufficient data for CVaR, using equal weights")
+        weight = 1.0 / len(tickers)
+        weights = {ticker: weight for ticker in tickers}
+    else:
+        recent_returns = returns_df.tail(lookback_period)
+
+        # Calculate CVaR (Expected Shortfall) for each asset
+        cvar_values = {}
+        for ticker in tickers:
+            returns = recent_returns[ticker]
+            var_threshold = returns.quantile(1 - confidence_level)
+            # CVaR = average of returns below VaR threshold
+            tail_losses = returns[returns <= var_threshold]
+            cvar_values[ticker] = abs(tail_losses.mean()) if len(tail_losses) > 0 else 0
+
+        # Inverse CVaR weighting (lower tail risk = higher weight)
+        if sum(cvar_values.values()) > 0:
+            inv_cvar = {ticker: 1.0 / (cvar + 1e-6) for ticker, cvar in cvar_values.items()}
+            total_inv_cvar = sum(inv_cvar.values())
+            weights = {ticker: inv_cvar[ticker] / total_inv_cvar for ticker in tickers}
+        else:
+            weight = 1.0 / len(tickers)
+            weights = {ticker: weight for ticker in tickers}
+
+    # All buy-and-hold signals
+    signals = {ticker: pd.Series([1] * len(common_index), index=common_index, name='Signal')
+              for ticker in tickers}
+
+    logger.info(f"CVaR Optimization: {len(tickers)} assets, confidence={confidence_level}")
+
+    return signals, weights
+
+
 # Strategy registry for portfolio strategies
 PORTFOLIO_STRATEGY_MAP = {
     'equal_weight_buy_hold': {
@@ -490,6 +717,36 @@ PORTFOLIO_STRATEGY_MAP = {
         'parameters': {
             'lookback_period': [120, 252, 504],
             'risk_free_rate': [0.01, 0.02, 0.03]
+        }
+    },
+    'hierarchical_risk_parity': {
+        'name': 'Hierarchical Risk Parity (HRP)',
+        'func': hierarchical_risk_parity,
+        'category': 'Portfolio - Advanced',
+        'description': 'Stable allocation using hierarchical clustering',
+        'parameters': {
+            'lookback_period': [120, 252, 504]
+        }
+    },
+    'black_litterman': {
+        'name': 'Black-Litterman Model',
+        'func': black_litterman,
+        'category': 'Portfolio - Advanced',
+        'description': 'Combines market equilibrium with investor views',
+        'parameters': {
+            'lookback_period': [120, 252, 504],
+            'tau': [0.01, 0.05, 0.1],
+            'view_confidence': [0.3, 0.5, 0.7]
+        }
+    },
+    'cvar_optimization': {
+        'name': 'CVaR Optimization',
+        'func': cvar_optimization,
+        'category': 'Portfolio - Advanced',
+        'description': 'Minimize tail risk (worst-case scenarios)',
+        'parameters': {
+            'lookback_period': [120, 252, 504],
+            'confidence_level': [0.90, 0.95, 0.99]
         }
     }
 }

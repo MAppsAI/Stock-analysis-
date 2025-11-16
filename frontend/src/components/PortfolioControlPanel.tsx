@@ -221,6 +221,7 @@ export default function PortfolioControlPanel({
             <MenuItem value="monthly">Monthly</MenuItem>
             <MenuItem value="quarterly">Quarterly</MenuItem>
             <MenuItem value="threshold">Threshold (5%)</MenuItem>
+            <MenuItem value="tax_aware">Tax-Aware (Minimize Tax Impact)</MenuItem>
           </Select>
         </FormControl>
       </Box>
