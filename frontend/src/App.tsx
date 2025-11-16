@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Container, Box, Typography, Paper, Tabs, Tab, CircularProgress } from '@mui/material';
-import { Insights } from '@mui/icons-material';
+import { Container, Box, Typography, Paper, Tabs, Tab, CircularProgress, ToggleButton, ToggleButtonGroup } from '@mui/material';
+import { Insights, ShowChart, AccountBalance } from '@mui/icons-material';
 import ControlPanel from './components/ControlPanel';
 import SummaryCards from './components/SummaryCards';
 import VisualizationPanel from './components/VisualizationPanel';
@@ -8,12 +8,16 @@ import ResultsTable from './components/ResultsTable';
 import StrategyDrilldown from './components/StrategyDrilldown';
 import OptimizationPanel from './components/OptimizationPanel';
 import HistoryPanel from './components/HistoryPanel';
-import { BacktestResponse, StrategyResult, OptimizationResponse } from './types';
+import PortfolioControlPanel from './components/PortfolioControlPanel';
+import PortfolioMetricsTable from './components/PortfolioMetricsTable';
+import { BacktestResponse, StrategyResult, OptimizationResponse, PortfolioBacktestResponse } from './types';
 import { api } from './api';
 
 function App() {
+  const [mode, setMode] = useState<'single' | 'portfolio'>('single');
   const [backtestData, setBacktestData] = useState<BacktestResponse | null>(null);
   const [optimizationData, setOptimizationData] = useState<OptimizationResponse | null>(null);
+  const [portfolioData, setPortfolioData] = useState<PortfolioBacktestResponse | null>(null);
   const [selectedStrategy, setSelectedStrategy] = useState<StrategyResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
@@ -77,6 +81,22 @@ function App() {
 
   const handleCloseModal = () => {
     setSelectedStrategy(null);
+  };
+
+  const handlePortfolioBacktestComplete = (data: PortfolioBacktestResponse) => {
+    setPortfolioData(data);
+    setBacktestData(null);
+    setOptimizationData(null);
+  };
+
+  const handleModeChange = (_event: React.MouseEvent<HTMLElement>, newMode: 'single' | 'portfolio' | null) => {
+    if (newMode !== null) {
+      setMode(newMode);
+      setBacktestData(null);
+      setOptimizationData(null);
+      setPortfolioData(null);
+      setActiveTab(0);
+    }
   };
 
   return (
@@ -181,17 +201,55 @@ function App() {
           </Box>
         </Paper>
 
+        {/* Mode Toggle */}
+        <Box sx={{ mb: 3, display: 'flex', justifyContent: 'center' }}>
+          <ToggleButtonGroup
+            value={mode}
+            exclusive
+            onChange={handleModeChange}
+            aria-label="backtest mode"
+            sx={{
+              '& .MuiToggleButton-root': {
+                px: 3,
+                py: 1.5,
+                borderColor: 'rgba(0, 255, 255, 0.3)',
+                '&.Mui-selected': {
+                  backgroundColor: 'rgba(0, 255, 255, 0.2)',
+                  color: '#00ffff',
+                  borderColor: '#00ffff',
+                },
+              },
+            }}
+          >
+            <ToggleButton value="single" aria-label="single asset">
+              <ShowChart sx={{ mr: 1 }} />
+              Single Asset
+            </ToggleButton>
+            <ToggleButton value="portfolio" aria-label="portfolio">
+              <AccountBalance sx={{ mr: 1 }} />
+              Portfolio
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
+
         {/* Control Panel with staggered animation */}
         <Box
           sx={{
             animation: 'fadeInUp 0.8s ease-out 0.1s backwards',
           }}
         >
-          <ControlPanel
-            onBacktestComplete={handleBacktestComplete}
-            onOptimizationComplete={handleOptimizationComplete}
-            setIsLoading={setIsLoading}
-          />
+          {mode === 'single' ? (
+            <ControlPanel
+              onBacktestComplete={handleBacktestComplete}
+              onOptimizationComplete={handleOptimizationComplete}
+              setIsLoading={setIsLoading}
+            />
+          ) : (
+            <PortfolioControlPanel
+              onBacktestComplete={handlePortfolioBacktestComplete}
+              setIsLoading={setIsLoading}
+            />
+          )}
         </Box>
 
         {/* Loading state with elegant spinner */}
@@ -236,35 +294,37 @@ function App() {
         )}
 
         {/* Results section with staggered animations */}
-        {(backtestData || optimizationData) && !isLoading && (
+        {(backtestData || optimizationData || portfolioData) && !isLoading && (
           <Box
             sx={{
               mt: 3,
               animation: 'fadeInUp 0.8s ease-out 0.2s backwards',
             }}
           >
-            <Paper
-              sx={{
-                mb: 3,
-                overflow: 'hidden',
-              }}
-            >
-              <Tabs
-                value={activeTab}
-                onChange={(_, newValue) => setActiveTab(newValue)}
+            {mode === 'single' && (
+              <Paper
                 sx={{
-                  '& .MuiTabs-indicator': {
-                    background: 'linear-gradient(90deg, #00ffff 0%, #00cccc 100%)',
-                    height: '3px',
-                  },
+                  mb: 3,
+                  overflow: 'hidden',
                 }}
               >
-                <Tab label="Backtest Results" disabled={!backtestData} />
-                <Tab label="Optimization Results" disabled={!optimizationData} />
-              </Tabs>
-            </Paper>
+                <Tabs
+                  value={activeTab}
+                  onChange={(_, newValue) => setActiveTab(newValue)}
+                  sx={{
+                    '& .MuiTabs-indicator': {
+                      background: 'linear-gradient(90deg, #00ffff 0%, #00cccc 100%)',
+                      height: '3px',
+                    },
+                  }}
+                >
+                  <Tab label="Backtest Results" disabled={!backtestData} />
+                  <Tab label="Optimization Results" disabled={!optimizationData} />
+                </Tabs>
+              </Paper>
+            )}
 
-            {activeTab === 0 && backtestData && (
+            {mode === 'single' && activeTab === 0 && backtestData && (
               <Box>
                 <Box sx={{ animation: 'fadeInUp 0.6s ease-out 0.1s backwards' }}>
                   <SummaryCards
@@ -287,9 +347,20 @@ function App() {
               </Box>
             )}
 
-            {activeTab === 1 && optimizationData && (
+            {mode === 'single' && activeTab === 1 && optimizationData && (
               <Box sx={{ animation: 'fadeInUp 0.6s ease-out 0.1s backwards' }}>
                 <OptimizationPanel optimizationData={optimizationData} />
+              </Box>
+            )}
+
+            {mode === 'portfolio' && portfolioData && (
+              <Box>
+                <Box sx={{ animation: 'fadeInUp 0.6s ease-out 0.1s backwards' }}>
+                  <PortfolioMetricsTable
+                    results={portfolioData.results}
+                    buyHoldResult={portfolioData.buy_hold_result}
+                  />
+                </Box>
               </Box>
             )}
           </Box>

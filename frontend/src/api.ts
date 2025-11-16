@@ -9,6 +9,10 @@ import {
   SaveHistoryResponse,
   HistoryListResponse,
   HistoryDetail,
+  PortfolioBacktestRequest,
+  PortfolioBacktestResponse,
+  PortfolioStrategy,
+  CorrelationResponse,
 } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -52,6 +56,22 @@ export const api = {
 
   async deleteHistory(id: number): Promise<{ message: string }> {
     const response = await axios.delete(`${API_BASE_URL}/api/v1/history/${id}`);
+    return response.data;
+  },
+
+  // Portfolio endpoints
+  async getPortfolioStrategies(): Promise<{ strategies: PortfolioStrategy[] }> {
+    const response = await axios.get(`${API_BASE_URL}/api/v1/portfolio/strategies`);
+    return response.data;
+  },
+
+  async runPortfolioBacktest(request: PortfolioBacktestRequest): Promise<PortfolioBacktestResponse> {
+    const response = await axios.post(`${API_BASE_URL}/api/v1/portfolio/backtest`, request);
+    return response.data;
+  },
+
+  async getCorrelation(request: PortfolioBacktestRequest): Promise<CorrelationResponse> {
+    const response = await axios.post(`${API_BASE_URL}/api/v1/portfolio/correlation`, request);
     return response.data;
   },
 };
