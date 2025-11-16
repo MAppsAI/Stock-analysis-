@@ -17,13 +17,14 @@ import { StrategyResult } from '../types';
 
 interface ResultsTableProps {
   results: StrategyResult[];
+  buyHoldResult?: StrategyResult;
   onStrategyClick: (strategy: StrategyResult) => void;
 }
 
 type SortField = keyof StrategyResult;
 type SortOrder = 'asc' | 'desc';
 
-export default function ResultsTable({ results, onStrategyClick }: ResultsTableProps) {
+export default function ResultsTable({ results, buyHoldResult, onStrategyClick }: ResultsTableProps) {
   const [sortField, setSortField] = useState<SortField>('total_return');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
@@ -257,6 +258,122 @@ export default function ResultsTable({ results, onStrategyClick }: ResultsTableP
             </TableRow>
           </TableHead>
           <TableBody>
+            {/* Buy & Hold Baseline Row */}
+            {buyHoldResult && (
+              <TableRow
+                sx={{
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  '& td': {
+                    background: 'rgba(255, 165, 0, 0.08)',
+                    borderBottom: '2px solid rgba(255, 165, 0, 0.3)',
+                    borderTop: '2px solid rgba(255, 165, 0, 0.3)',
+                  },
+                  '& td:first-of-type': {
+                    borderLeft: '2px solid rgba(255, 165, 0, 0.3)',
+                    borderTopLeftRadius: '8px',
+                    borderBottomLeftRadius: '8px',
+                  },
+                  '& td:last-of-type': {
+                    borderRight: '2px solid rgba(255, 165, 0, 0.3)',
+                    borderTopRightRadius: '8px',
+                    borderBottomRightRadius: '8px',
+                  },
+                  '&:hover': {
+                    '& td': {
+                      background: 'rgba(255, 165, 0, 0.15)',
+                      borderColor: 'rgba(255, 165, 0, 0.5)',
+                    },
+                  },
+                }}
+                onClick={() => onStrategyClick(buyHoldResult)}
+              >
+                <TableCell>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontWeight: 700,
+                      color: '#ffa500',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                    }}
+                  >
+                    {buyHoldResult.strategy}
+                    <Chip
+                      label="BASELINE"
+                      size="small"
+                      sx={{
+                        height: '18px',
+                        fontSize: '10px',
+                        background: 'rgba(255, 165, 0, 0.2)',
+                        color: '#ffa500',
+                        border: '1px solid rgba(255, 165, 0, 0.4)',
+                        fontWeight: 700,
+                      }}
+                    />
+                  </Typography>
+                </TableCell>
+                <TableCell align="right">
+                  <Chip
+                    icon={buyHoldResult.total_return > 0 ? <TrendingUp fontSize="small" /> : <TrendingDown fontSize="small" />}
+                    label={formatPercent(buyHoldResult.total_return)}
+                    size="small"
+                    sx={{
+                      background: buyHoldResult.total_return > 0
+                        ? 'linear-gradient(135deg, rgba(255, 165, 0, 0.3) 0%, rgba(200, 120, 0, 0.15) 100%)'
+                        : 'linear-gradient(135deg, rgba(255, 0, 85, 0.2) 0%, rgba(200, 0, 70, 0.1) 100%)',
+                      color: buyHoldResult.total_return > 0 ? '#ffa500' : getReturnColor(buyHoldResult.total_return),
+                      border: `1px solid ${buyHoldResult.total_return > 0 ? '#ffa500' : getReturnColor(buyHoldResult.total_return)}40`,
+                      fontWeight: 700,
+                      fontFamily: '"JetBrains Mono", monospace',
+                    }}
+                  />
+                </TableCell>
+                <TableCell
+                  align="right"
+                  sx={{
+                    color: '#ffa500',
+                    fontWeight: 600,
+                    fontFamily: '"JetBrains Mono", monospace',
+                  }}
+                >
+                  {formatPercent(buyHoldResult.win_rate)}
+                </TableCell>
+                <TableCell
+                  align="right"
+                  sx={{
+                    color: '#ff0055',
+                    fontWeight: 600,
+                    fontFamily: '"JetBrains Mono", monospace',
+                  }}
+                >
+                  {formatPercent(buyHoldResult.max_drawdown)}
+                </TableCell>
+                <TableCell
+                  align="right"
+                  sx={{
+                    color: buyHoldResult.sharpe_ratio > 1 ? '#ffa500' : '#b0b0b0',
+                    fontWeight: 600,
+                    fontFamily: '"JetBrains Mono", monospace',
+                  }}
+                >
+                  {buyHoldResult.sharpe_ratio.toFixed(2)}
+                </TableCell>
+                <TableCell
+                  align="right"
+                  sx={{
+                    color: '#b0b0b0',
+                    fontWeight: 600,
+                    fontFamily: '"JetBrains Mono", monospace',
+                  }}
+                >
+                  {buyHoldResult.num_trades}
+                </TableCell>
+              </TableRow>
+            )}
+
+            {/* Strategy Results Rows */}
             {sortedResults.map((result, index) => (
               <TableRow
                 key={index}

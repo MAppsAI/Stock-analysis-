@@ -45,6 +45,7 @@ class BacktestResponse(BaseModel):
     endDate: str
     results: List[StrategyResult]
     price_data: List[dict]  # OHLC data for charting
+    buy_hold_result: Optional[StrategyResult] = None  # Buy and hold baseline for comparison
 
 
 class OptimizationResult(BaseModel):
