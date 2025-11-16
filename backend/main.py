@@ -8,11 +8,17 @@ from typing import List
 from models import (
     BacktestRequest, BacktestResponse, StrategyResult, TradeSignal, EquityPoint,
     OptimizationRequest, OptimizationResponse,
-    SaveHistoryRequest, SaveHistoryResponse, HistoryListResponse, HistoryDetail
+    SaveHistoryRequest, SaveHistoryResponse, HistoryListResponse, HistoryDetail,
+    PortfolioBacktestRequest, PortfolioBacktestResponse, PortfolioStrategyResult,
+    PortfolioMetrics, AssetMetrics, WeightSnapshot
 )
 from strategies import STRATEGY_MAP, calculate_metrics, calculate_buy_hold_metrics
 from optimizer import optimize_multiple_strategies, generate_optimization_summary
 from database import db
+from portfolio_strategies import PORTFOLIO_STRATEGY_MAP
+from portfolio import (
+    PortfolioEngine, calculate_portfolio_returns, create_equity_curve
+)
 
 app = FastAPI(title="Stock Analysis API", version="4.1.0")
 
@@ -241,7 +247,275 @@ async def optimize_strategies(request: OptimizationRequest):
         raise HTTPException(status_code=500, detail=f"Optimization error: {error_msg}")
 
 
+# =============================================================================
+# PORTFOLIO (MULTI-ASSET) ENDPOINTS
+# =============================================================================
+
+@app.get("/api/v1/portfolio/strategies")
+def get_portfolio_strategies():
+    """Get list of available portfolio (multi-asset) strategies"""
+    return {
+        "strategies": [
+            {
+                "id": key,
+                "name": value['name'],
+                "category": value['category'],
+                "description": value.get('description', ''),
+                "parameters": value.get('parameters', {})
+            }
+            for key, value in PORTFOLIO_STRATEGY_MAP.items()
+        ]
+    }
+
+
+@app.post("/api/v1/portfolio/backtest", response_model=PortfolioBacktestResponse)
+async def run_portfolio_backtest(request: PortfolioBacktestRequest):
+    """
+    Run backtest for multi-asset portfolio strategies
+    """
+    try:
+        # Download data for all tickers
+        asset_data = {}
+        price_data = {}
+
+        for ticker in request.tickers:
+            data = yf.download(
+                ticker,
+                start=request.startDate,
+                end=request.endDate,
+                progress=False,
+                auto_adjust=False
+            )
+
+            # Handle multi-level columns
+            if isinstance(data.columns, pd.MultiIndex):
+                data.columns = data.columns.get_level_values(0)
+
+            if data.empty:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No data found for ticker {ticker} in the specified date range."
+                )
+
+            asset_data[ticker] = data
+
+            # Prepare price data for charting
+            price_data[ticker] = []
+            for idx, row in data.iterrows():
+                price_data[ticker].append({
+                    'date': idx.strftime('%Y-%m-%d'),
+                    'open': float(row['Open']),
+                    'high': float(row['High']),
+                    'low': float(row['Low']),
+                    'close': float(row['Close']),
+                    'volume': int(row['Volume'])
+                })
+
+        # Run portfolio strategies
+        results = []
+
+        for strategy_id in request.strategies:
+            if strategy_id not in PORTFOLIO_STRATEGY_MAP:
+                continue
+
+            strategy_func = PORTFOLIO_STRATEGY_MAP[strategy_id]['func']
+
+            # Run strategy to get signals and weights
+            asset_signals, weights = strategy_func(asset_data)
+
+            # Initialize portfolio engine
+            engine = PortfolioEngine(
+                tickers=request.tickers,
+                asset_data=asset_data,
+                allocation_method=request.allocation_method,
+                custom_weights=request.custom_weights or weights,
+                rebalancing=request.rebalancing,
+                rebalance_threshold=request.rebalance_threshold,
+                transaction_cost=request.transaction_cost
+            )
+
+            # Calculate portfolio returns
+            portfolio_returns, weights_timeline, rebalance_dates = calculate_portfolio_returns(
+                asset_data=asset_data,
+                asset_signals=asset_signals,
+                weights=engine.initial_weights,
+                rebalancing=request.rebalancing,
+                rebalance_threshold=request.rebalance_threshold,
+                transaction_cost=request.transaction_cost
+            )
+
+            # Calculate asset-level returns for metrics
+            asset_returns = {}
+            for ticker in request.tickers:
+                returns = asset_data[ticker]['Close'].pct_change().fillna(0)
+                asset_returns[ticker] = returns
+
+            # Calculate portfolio metrics
+            portfolio_metrics_dict = engine.calculate_portfolio_metrics(
+                portfolio_returns=portfolio_returns,
+                asset_returns=asset_returns,
+                weights_timeline=weights_timeline,
+                rebalance_dates=rebalance_dates
+            )
+
+            # Calculate asset metrics
+            asset_metrics_dict = engine.calculate_asset_metrics(
+                asset_returns=asset_returns,
+                asset_signals=asset_signals
+            )
+
+            # Create equity curve
+            equity_curve = create_equity_curve(portfolio_returns)
+
+            # Format results
+            portfolio_metrics = PortfolioMetrics(**portfolio_metrics_dict)
+
+            asset_metrics_list = [
+                AssetMetrics(ticker=ticker, **metrics)
+                for ticker, metrics in asset_metrics_dict.items()
+            ]
+
+            weights_timeline_list = [
+                WeightSnapshot(**snapshot) for snapshot in weights_timeline
+            ]
+
+            result = PortfolioStrategyResult(
+                strategy=PORTFOLIO_STRATEGY_MAP[strategy_id]['name'],
+                portfolio_metrics=portfolio_metrics,
+                asset_metrics=asset_metrics_list,
+                equity_curve=[EquityPoint(**point) for point in equity_curve],
+                weights_timeline=weights_timeline_list
+            )
+
+            results.append(result)
+
+        # Calculate equal-weight buy-and-hold baseline
+        buy_hold_signals = {ticker: pd.Series([1] * len(asset_data[ticker]),
+                                              index=asset_data[ticker].index)
+                           for ticker in request.tickers}
+        buy_hold_weights = {ticker: 1.0 / len(request.tickers) for ticker in request.tickers}
+
+        engine = PortfolioEngine(
+            tickers=request.tickers,
+            asset_data=asset_data,
+            allocation_method='equal'
+        )
+
+        portfolio_returns, weights_timeline, rebalance_dates = calculate_portfolio_returns(
+            asset_data=asset_data,
+            asset_signals=buy_hold_signals,
+            weights=buy_hold_weights,
+            rebalancing='none'
+        )
+
+        asset_returns = {ticker: asset_data[ticker]['Close'].pct_change().fillna(0)
+                        for ticker in request.tickers}
+
+        buy_hold_metrics_dict = engine.calculate_portfolio_metrics(
+            portfolio_returns=portfolio_returns,
+            asset_returns=asset_returns,
+            weights_timeline=weights_timeline,
+            rebalance_dates=rebalance_dates
+        )
+
+        buy_hold_asset_metrics = engine.calculate_asset_metrics(
+            asset_returns=asset_returns,
+            asset_signals=buy_hold_signals
+        )
+
+        buy_hold_result = PortfolioStrategyResult(
+            strategy="Equal-Weight Buy & Hold",
+            portfolio_metrics=PortfolioMetrics(**buy_hold_metrics_dict),
+            asset_metrics=[AssetMetrics(ticker=ticker, **metrics)
+                          for ticker, metrics in buy_hold_asset_metrics.items()],
+            equity_curve=[EquityPoint(**point) for point in create_equity_curve(portfolio_returns)],
+            weights_timeline=[WeightSnapshot(**s) for s in weights_timeline]
+        )
+
+        return PortfolioBacktestResponse(
+            tickers=request.tickers,
+            startDate=request.startDate,
+            endDate=request.endDate,
+            results=results,
+            price_data=price_data,
+            buy_hold_result=buy_hold_result
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = str(e)
+        if "403" in error_msg or "Forbidden" in error_msg or "Access denied" in error_msg:
+            raise HTTPException(
+                status_code=503,
+                detail="Yahoo Finance access denied. Please try again later."
+            )
+        raise HTTPException(status_code=500, detail=f"Portfolio backtest error: {error_msg}")
+
+
+@app.post("/api/v1/portfolio/correlation")
+async def calculate_correlation(request: PortfolioBacktestRequest):
+    """
+    Calculate correlation matrix for a set of assets
+    """
+    try:
+        # Download data for all tickers
+        asset_data = {}
+
+        for ticker in request.tickers:
+            data = yf.download(
+                ticker,
+                start=request.startDate,
+                end=request.endDate,
+                progress=False,
+                auto_adjust=False
+            )
+
+            if isinstance(data.columns, pd.MultiIndex):
+                data.columns = data.columns.get_level_values(0)
+
+            if data.empty:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No data found for ticker {ticker}"
+                )
+
+            asset_data[ticker] = data
+
+        # Calculate returns
+        returns_df = pd.DataFrame({
+            ticker: data['Close'].pct_change()
+            for ticker, data in asset_data.items()
+        }).dropna()
+
+        # Calculate correlation and covariance
+        correlation = returns_df.corr().to_dict()
+        covariance = returns_df.cov().to_dict()
+
+        # Calculate volatilities
+        volatilities = {ticker: float(returns_df[ticker].std() * (252 ** 0.5))
+                       for ticker in request.tickers}
+
+        return {
+            "tickers": request.tickers,
+            "correlation_matrix": correlation,
+            "covariance_matrix": covariance,
+            "volatilities": volatilities,
+            "date_range": {
+                "start": request.startDate,
+                "end": request.endDate
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Correlation calculation error: {str(e)}")
+
+
+# =============================================================================
 # History Management Endpoints
+# =============================================================================
 
 @app.post("/api/v1/history", response_model=SaveHistoryResponse)
 async def save_history(request: SaveHistoryRequest):

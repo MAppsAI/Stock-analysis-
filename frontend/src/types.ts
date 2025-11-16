@@ -120,3 +120,89 @@ export interface HistoryListResponse {
   total_count: number;
   items: HistorySummary[];
 }
+
+// =============================================================================
+// PORTFOLIO (MULTI-ASSET) TYPES
+// =============================================================================
+
+export interface PortfolioBacktestRequest {
+  tickers: string[];
+  startDate: string;
+  endDate: string;
+  strategies: string[];
+  allocation_method?: string;
+  custom_weights?: Record<string, number>;
+  rebalancing?: string;
+  rebalance_threshold?: number;
+  transaction_cost?: number;
+}
+
+export interface AssetMetrics {
+  ticker: string;
+  total_return: number;
+  volatility: number;
+  sharpe_ratio: number;
+  max_drawdown: number;
+  win_rate: number;
+  weight: number;
+  contribution_to_return: number;
+}
+
+export interface WeightSnapshot {
+  date: string;
+  weights: Record<string, number>;
+  rebalance?: boolean;
+}
+
+export interface PortfolioMetrics {
+  total_return: number;
+  annualized_return: number;
+  volatility: number;
+  sharpe_ratio: number;
+  max_drawdown: number;
+  win_rate: number;
+  num_rebalances: number;
+  turnover: number;
+  diversification_ratio: number;
+  correlation_matrix: Record<string, Record<string, number>>;
+  rebalance_dates: string[];
+  total_transaction_costs?: number;
+  transaction_cost_impact_pct?: number;
+  estimated_tax_drag_pct?: number;
+}
+
+export interface PortfolioStrategyResult {
+  strategy: string;
+  portfolio_metrics: PortfolioMetrics;
+  asset_metrics: AssetMetrics[];
+  equity_curve: EquityPoint[];
+  weights_timeline: WeightSnapshot[];
+}
+
+export interface PortfolioBacktestResponse {
+  tickers: string[];
+  startDate: string;
+  endDate: string;
+  results: PortfolioStrategyResult[];
+  price_data: Record<string, PriceData[]>;
+  buy_hold_result?: PortfolioStrategyResult;
+}
+
+export interface PortfolioStrategy {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  parameters?: Record<string, any>;
+}
+
+export interface CorrelationResponse {
+  tickers: string[];
+  correlation_matrix: Record<string, Record<string, number>>;
+  covariance_matrix: Record<string, Record<string, number>>;
+  volatilities: Record<string, number>;
+  date_range: {
+    start: string;
+    end: string;
+  };
+}

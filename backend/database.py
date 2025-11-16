@@ -34,7 +34,10 @@ class HistoryDatabase:
                     created_at TEXT NOT NULL,
                     title TEXT,
                     results_data TEXT NOT NULL,
-                    summary_metrics TEXT
+                    summary_metrics TEXT,
+                    tickers TEXT,
+                    portfolio_config TEXT,
+                    asset_weights TEXT
                 )
             """)
 
@@ -50,7 +53,25 @@ class HistoryDatabase:
                 ON backtest_history(created_at DESC)
             """)
 
+            # Migrate existing tables to add new columns if needed
+            self._migrate_schema(cursor)
+
             conn.commit()
+
+    def _migrate_schema(self, cursor):
+        """Add new columns to existing tables if they don't exist."""
+        # Check if new columns exist
+        cursor.execute("PRAGMA table_info(backtest_history)")
+        columns = [col[1] for col in cursor.fetchall()]
+
+        if 'tickers' not in columns:
+            cursor.execute("ALTER TABLE backtest_history ADD COLUMN tickers TEXT")
+
+        if 'portfolio_config' not in columns:
+            cursor.execute("ALTER TABLE backtest_history ADD COLUMN portfolio_config TEXT")
+
+        if 'asset_weights' not in columns:
+            cursor.execute("ALTER TABLE backtest_history ADD COLUMN asset_weights TEXT")
 
     def save_backtest(
         self,
@@ -144,6 +165,63 @@ class HistoryDatabase:
                 title,
                 json.dumps(results_data),
                 json.dumps(summary_metrics)
+            ))
+            conn.commit()
+            return cursor.lastrowid
+
+    def save_portfolio_backtest(
+        self,
+        tickers: List[str],
+        start_date: str,
+        end_date: str,
+        results_data: Dict[str, Any],
+        portfolio_config: Optional[Dict[str, Any]] = None,
+        title: Optional[str] = None
+    ) -> int:
+        """
+        Save a portfolio backtest result to the database.
+
+        Args:
+            tickers: List of stock ticker symbols in portfolio
+            start_date: Backtest start date
+            end_date: Backtest end date
+            results_data: Complete portfolio backtest response data
+            portfolio_config: Portfolio configuration (allocation method, rebalancing, etc.)
+            title: Optional custom title for the backtest
+
+        Returns:
+            ID of the saved record
+        """
+        if title is None:
+            title = f"Portfolio ({', '.join(tickers[:3])}{'...' if len(tickers) > 3 else ''}) Backtest"
+
+        # Extract summary metrics for portfolio
+        summary_metrics = self._extract_portfolio_summary_metrics(results_data)
+
+        created_at = datetime.now().isoformat()
+
+        # Store first ticker for backwards compatibility
+        primary_ticker = tickers[0] if tickers else "PORTFOLIO"
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO backtest_history
+                (ticker, start_date, end_date, run_type, created_at, title, results_data,
+                 summary_metrics, tickers, portfolio_config, asset_weights)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                primary_ticker.upper(),
+                start_date,
+                end_date,
+                "portfolio_backtest",
+                created_at,
+                title,
+                json.dumps(results_data),
+                json.dumps(summary_metrics),
+                json.dumps(tickers),
+                json.dumps(portfolio_config) if portfolio_config else None,
+                None  # asset_weights can be extracted from results_data if needed
             ))
             conn.commit()
             return cursor.lastrowid
@@ -311,6 +389,31 @@ class HistoryDatabase:
             "strategies_optimized": summary.get("strategies_optimized", 0),
             "avg_improvement": summary.get("average_improvement", 0),
             "total_combinations_tested": summary.get("total_combinations_tested", 0),
+        }
+
+    def _extract_portfolio_summary_metrics(self, results_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract summary metrics from portfolio backtest results."""
+        results = results_data.get("results", [])
+
+        if not results:
+            return {}
+
+        # Find best strategy by portfolio total return
+        best_strategy = max(results, key=lambda x: x.get("portfolio_metrics", {}).get("total_return", 0))
+
+        # Calculate average metrics
+        total_returns = [r.get("portfolio_metrics", {}).get("total_return", 0) for r in results]
+        sharpe_ratios = [r.get("portfolio_metrics", {}).get("sharpe_ratio", 0) for r in results]
+        max_drawdowns = [r.get("portfolio_metrics", {}).get("max_drawdown", 0) for r in results]
+
+        return {
+            "num_strategies": len(results),
+            "num_assets": len(results_data.get("tickers", [])),
+            "best_strategy": best_strategy.get("strategy"),
+            "best_return": best_strategy.get("portfolio_metrics", {}).get("total_return"),
+            "avg_return": sum(total_returns) / len(total_returns) if total_returns else 0,
+            "avg_sharpe": sum(sharpe_ratios) / len(sharpe_ratios) if sharpe_ratios else 0,
+            "avg_max_drawdown": sum(max_drawdowns) / len(max_drawdowns) if max_drawdowns else 0,
         }
 
 
