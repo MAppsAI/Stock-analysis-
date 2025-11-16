@@ -8,7 +8,7 @@ from typing import List
 from models import BacktestRequest, BacktestResponse, StrategyResult, TradeSignal
 from strategies import STRATEGY_MAP, calculate_metrics
 
-app = FastAPI(title="Stock Analysis API", version="1.0.0")
+app = FastAPI(title="Stock Analysis API", version="2.0.0")
 
 # Configure CORS
 app.add_middleware(
@@ -23,8 +23,9 @@ app.add_middleware(
 @app.get("/")
 def read_root():
     return {
-        "message": "Stock Analysis API v1.0",
+        "message": "Stock Analysis API v2.0 - 25 Strategies",
         "status": "running",
+        "total_strategies": len(STRATEGY_MAP),
         "endpoints": {
             "/api/v1/backtest": "POST - Run backtest for selected strategies",
             "/api/v1/strategies": "GET - List available strategies"
@@ -34,13 +35,13 @@ def read_root():
 
 @app.get("/api/v1/strategies")
 def get_strategies():
-    """Get list of available strategies"""
+    """Get list of available strategies with their categories"""
     return {
         "strategies": [
             {
                 "id": key,
                 "name": value['name'],
-                "category": "Trend-Following"
+                "category": value['category']
             }
             for key, value in STRATEGY_MAP.items()
         ]
