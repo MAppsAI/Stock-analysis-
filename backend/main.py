@@ -22,6 +22,7 @@ from portfolio import (
 )
 from stock_universe import get_universe_tickers, get_available_universes
 from strategy_scanner import scan_universe, generate_summary
+from data_cache import get_cache
 
 app = FastAPI(title="Stock Analysis API", version="4.2.0")
 
@@ -679,7 +680,10 @@ async def run_scan(request: ScannerRequest):
             strategy_ids=request.strategies,
             lookback_days=request.lookback_days,
             max_workers=10,
-            max_stocks=request.max_stocks
+            max_stocks=request.max_stocks,
+            use_cache=request.use_cache,
+            cache_expiry_hours=request.cache_expiry_hours,
+            batch_download=request.batch_download
         )
 
         # Filter by signal type if specified
@@ -726,6 +730,66 @@ async def run_scan(request: ScannerRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error running scan: {str(e)}")
+
+
+# =============================================================================
+# CACHE MANAGEMENT ENDPOINTS
+# =============================================================================
+
+@app.get("/api/v1/cache/stats")
+async def get_cache_stats():
+    """
+    Get cache statistics
+
+    Returns information about the data cache including size, file counts, etc.
+    """
+    try:
+        cache = get_cache()
+        stats = cache.get_stats()
+        return {
+            "cache_stats": stats,
+            "message": "Cache statistics retrieved successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting cache stats: {str(e)}")
+
+
+@app.post("/api/v1/cache/clear")
+async def clear_cache(ticker: Optional[str] = None):
+    """
+    Clear cache for specific ticker or all tickers
+
+    Query Parameters:
+        ticker (optional): Ticker to clear cache for. If not specified, clears all cache.
+    """
+    try:
+        cache = get_cache()
+        cache.clear(ticker)
+
+        if ticker:
+            return {"message": f"Cache cleared for {ticker}"}
+        else:
+            return {"message": "All cache cleared"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error clearing cache: {str(e)}")
+
+
+@app.post("/api/v1/cache/cleanup")
+async def cleanup_cache():
+    """
+    Remove expired cache files
+
+    Removes only expired cache files, keeping valid ones.
+    """
+    try:
+        cache = get_cache()
+        removed_count = cache.cleanup_expired()
+        return {
+            "message": f"Cleaned up {removed_count} expired cache files",
+            "removed_count": removed_count
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error cleaning up cache: {str(e)}")
 
 
 if __name__ == "__main__":
