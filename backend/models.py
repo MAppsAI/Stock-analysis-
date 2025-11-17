@@ -207,3 +207,56 @@ class PortfolioOptimizationResult(BaseModel):
     expected_volatility: float
     expected_sharpe: float
     all_results: List[Dict[str, Any]]  # All tested combinations
+
+
+# =============================================================================
+# SCANNER MODELS
+# =============================================================================
+
+class ScannerRequest(BaseModel):
+    """Request to scan for signals across a universe of stocks"""
+    universe: str  # 'sp500', 'nasdaq100', 'russell2000', 'all'
+    strategies: List[str]  # List of strategy IDs to scan for
+    lookback_days: int = 14  # Days to look back for signals
+    max_stocks: Optional[int] = None  # Limit for testing (None = all)
+    signal_type: Optional[str] = None  # Filter by 'buy' or 'sell'
+
+
+class ScanSignal(BaseModel):
+    """Individual signal found by scanner"""
+    ticker: str
+    strategy: str
+    strategy_category: str
+    signal_type: str  # 'buy' or 'sell'
+    signal_date: str
+    signal_price: float
+    current_price: float
+    days_ago: int
+    price_change_pct: float
+
+
+class ScannerResponse(BaseModel):
+    """Response from scanner"""
+    universe: str
+    strategies_scanned: List[str]
+    total_stocks_scanned: int
+    total_signals_found: int
+    unique_tickers: int
+    lookback_days: int
+    scan_completed_at: str
+    signals: List[ScanSignal]
+    summary: Dict[str, Any]
+
+
+class UniverseInfo(BaseModel):
+    """Information about a stock universe"""
+    id: str
+    name: str
+    description: str
+    approximate_count: int
+    note: Optional[str] = None
+
+
+class UniverseListResponse(BaseModel):
+    """List of available universes"""
+    universes: List[UniverseInfo]
