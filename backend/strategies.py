@@ -1103,5 +1103,15 @@ ORIGINAL_STRATEGIES = {
 # This creates 12 entry conditions × 14 exit conditions = 168 combined strategies
 COMBINED_STRATEGIES = generate_combined_strategies()
 
+# Import Minervini SEPA strategies
+try:
+    from minervini_strategy import MINERVINI_STRATEGY_MAP
+    logger = __import__('logging').getLogger(__name__)
+    logger.info(f"Loaded {len(MINERVINI_STRATEGY_MAP)} Minervini SEPA strategies")
+except ImportError as e:
+    logger = __import__('logging').getLogger(__name__)
+    logger.warning(f"Could not load Minervini strategies: {e}")
+    MINERVINI_STRATEGY_MAP = {}
+
 # Merge all strategies into the final STRATEGY_MAP
-STRATEGY_MAP = {**ORIGINAL_STRATEGIES, **COMBINED_STRATEGIES}
+STRATEGY_MAP = {**ORIGINAL_STRATEGIES, **COMBINED_STRATEGIES, **MINERVINI_STRATEGY_MAP}
