@@ -10,7 +10,8 @@ from models import (
     OptimizationRequest, OptimizationResponse,
     SaveHistoryRequest, SaveHistoryResponse, HistoryListResponse, HistoryDetail,
     PortfolioBacktestRequest, PortfolioBacktestResponse, PortfolioStrategyResult,
-    PortfolioMetrics, AssetMetrics, WeightSnapshot
+    PortfolioMetrics, AssetMetrics, WeightSnapshot,
+    ScannerRequest, ScannerResponse, ScanSignal, UniverseInfo, UniverseListResponse
 )
 from strategies import STRATEGY_MAP, calculate_metrics, calculate_buy_hold_metrics
 from optimizer import optimize_multiple_strategies, generate_optimization_summary
@@ -19,8 +20,10 @@ from portfolio_strategies import PORTFOLIO_STRATEGY_MAP
 from portfolio import (
     PortfolioEngine, calculate_portfolio_returns, create_equity_curve
 )
+from stock_universe import get_universe_tickers, get_available_universes
+from strategy_scanner import scan_universe, generate_summary
 
-app = FastAPI(title="Stock Analysis API", version="4.1.0")
+app = FastAPI(title="Stock Analysis API", version="4.2.0")
 
 # Configure CORS
 app.add_middleware(
@@ -35,25 +38,24 @@ app.add_middleware(
 @app.get("/")
 def read_root():
     return {
-        "message": "Stock Analysis API v4.1 - 200+ Strategies with Hyperparameter Optimization",
+        "message": "Stock Analysis API v4.2 - Strategy Scanner + 200+ Strategies",
         "status": "running",
         "total_strategies": len(STRATEGY_MAP),
         "categories": len(set(s['category'] for s in STRATEGY_MAP.values())),
         "features": [
+            "Strategy Scanner (scan S&P 500, NASDAQ 100, Russell 2000)",
             "Backtesting",
-            "Hyperparameter Optimization (Original + Combined Strategies)",
+            "Hyperparameter Optimization",
             "Parallel Processing",
-            "Entry/Exit Strategy Combinations (12 entries × 14 exits = 168 combinations)",
-            "Combined Strategy Optimization (Entry params × Exit params)"
+            "Minervini SEPA Strategies",
+            "Entry/Exit Strategy Combinations"
         ],
         "endpoints": {
+            "/api/v1/scanner/universes": "GET - List available stock universes",
+            "/api/v1/scanner/scan": "POST - Scan for signals across universe",
             "/api/v1/backtest": "POST - Run backtest for selected strategies",
             "/api/v1/strategies": "GET - List available strategies",
-            "/api/v1/optimize": "POST - Optimize strategy parameters (supports combined strategies)"
-        },
-        "optimization": {
-            "supported": "All 203 strategies (35 original + 168 combined)",
-            "example": "Optimize 'combo_rsi_oversold_entry_trailing_stop_exit' to find best RSI threshold and stop %"
+            "/api/v1/optimize": "POST - Optimize strategy parameters"
         }
     }
 
@@ -614,6 +616,116 @@ async def delete_history(history_id: int):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting history: {str(e)}")
+
+
+# =============================================================================
+# SCANNER ENDPOINTS
+# =============================================================================
+
+@app.get("/api/v1/scanner/universes", response_model=UniverseListResponse)
+async def get_universes():
+    """
+    Get list of available stock universes for scanning
+    """
+    try:
+        universes_info = get_available_universes()
+
+        universes = [
+            UniverseInfo(
+                id=universe_id,
+                name=info['name'],
+                description=info['description'],
+                approximate_count=info['approximate_count'],
+                note=info.get('note')
+            )
+            for universe_id, info in universes_info.items()
+        ]
+
+        return UniverseListResponse(universes=universes)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching universes: {str(e)}")
+
+
+@app.post("/api/v1/scanner/scan", response_model=ScannerResponse)
+async def run_scan(request: ScannerRequest):
+    """
+    Scan a universe of stocks for trading signals
+
+    This endpoint scans the selected stock universe (S&P 500, NASDAQ 100, etc.)
+    for buy/sell signals from the specified strategies in the last N days.
+    """
+    try:
+        # Validate universe
+        available_universes = get_available_universes()
+        if request.universe not in available_universes:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid universe: {request.universe}. "
+                       f"Available: {list(available_universes.keys())}"
+            )
+
+        # Validate strategies
+        invalid_strategies = [s for s in request.strategies if s not in STRATEGY_MAP]
+        if invalid_strategies:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid strategies: {invalid_strategies}"
+            )
+
+        # Run scan
+        results = scan_universe(
+            universe=request.universe,
+            strategy_ids=request.strategies,
+            lookback_days=request.lookback_days,
+            max_workers=10,
+            max_stocks=request.max_stocks
+        )
+
+        # Filter by signal type if specified
+        if request.signal_type:
+            results = [r for r in results if r.signal_type == request.signal_type]
+
+        # Generate summary
+        summary = generate_summary(results)
+
+        # Get total stocks scanned
+        total_stocks = len(get_universe_tickers(request.universe))
+        if request.max_stocks:
+            total_stocks = min(total_stocks, request.max_stocks)
+
+        # Convert to response format
+        signals = [
+            ScanSignal(
+                ticker=r.ticker,
+                strategy=r.strategy,
+                strategy_category=r.metadata.get('strategy_category', 'Unknown'),
+                signal_type=r.signal_type,
+                signal_date=r.signal_date,
+                signal_price=r.signal_price,
+                current_price=r.current_price,
+                days_ago=r.days_ago,
+                price_change_pct=((r.current_price - r.signal_price) / r.signal_price) * 100
+            )
+            for r in results
+        ]
+
+        return ScannerResponse(
+            universe=request.universe,
+            strategies_scanned=request.strategies,
+            total_stocks_scanned=total_stocks,
+            total_signals_found=len(signals),
+            unique_tickers=summary['unique_tickers'],
+            lookback_days=request.lookback_days,
+            scan_completed_at=datetime.now().isoformat(),
+            signals=signals,
+            summary=summary
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error running scan: {str(e)}")
 
 
 if __name__ == "__main__":
