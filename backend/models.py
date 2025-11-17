@@ -220,6 +220,9 @@ class ScannerRequest(BaseModel):
     lookback_days: int = 14  # Days to look back for signals
     max_stocks: Optional[int] = None  # Limit for testing (None = all)
     signal_type: Optional[str] = None  # Filter by 'buy' or 'sell'
+    use_cache: bool = True  # Whether to use cached data (default True)
+    cache_expiry_hours: int = 4  # Cache expiry in hours (default 4)
+    batch_download: bool = True  # Use batch downloading (default True)
 
 
 class ScanSignal(BaseModel):
